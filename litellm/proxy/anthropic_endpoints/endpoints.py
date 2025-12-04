@@ -263,7 +263,9 @@ async def count_tokens(
         # Extract required fields
         model_name = data.get("model")
         messages = data.get("messages", [])
-        
+        system = data.get("system")
+        tools = data.get("tools")
+
         if not model_name:
             raise HTTPException(
                 status_code=400,
@@ -278,12 +280,13 @@ async def count_tokens(
         
         # Create TokenCountRequest for the internal endpoint
         from litellm.proxy._types import TokenCountRequest
-        
         token_request = TokenCountRequest(
             model=model_name,
-            messages=messages
+            messages=messages,
+            system=system,
+            tools=tools,
         )
-        
+
         # Call the internal token counter function with direct request flag set to False
         token_response = await internal_token_counter(
             request=token_request,
