@@ -154,12 +154,6 @@ async def anthropic_response(  # noqa: PLR0915
 
         response = responses[1]
 
-        hidden_params = getattr(response, "_hidden_params", {}) or {}
-        model_id = hidden_params.get("model_id", None) or ""
-        cache_key = hidden_params.get("cache_key", None) or ""
-        api_base = hidden_params.get("api_base", None) or ""
-        response_cost = hidden_params.get("response_cost", None) or ""
-
         ### ALERTING ###
         asyncio.create_task(
             proxy_logging_obj.update_request_status(
@@ -169,22 +163,35 @@ async def anthropic_response(  # noqa: PLR0915
 
         verbose_proxy_logger.debug("final response: %s", response)
 
-        fastapi_response.headers.update(
-            ProxyBaseLLMRequestProcessing.get_custom_headers(
-                user_api_key_dict=user_api_key_dict,
-                model_id=model_id,
-                cache_key=cache_key,
-                api_base=api_base,
-                version=version,
-                response_cost=response_cost,
-                request_data=data,
-                hidden_params=hidden_params,
-            )
-        )
-
         if (
             "stream" in data and data["stream"] is True
         ):  # use generate_responses to stream responses
+            # For streaming, set headers before returning streaming response
+            # Handle both dict and object responses
+            if isinstance(response, dict):
+                hidden_params = response.get("_hidden_params", {}) or {}
+            else:
+                hidden_params = getattr(response, "_hidden_params", {}) or {}
+            model_id = hidden_params.get("model_id", None) or ""
+            cache_key = hidden_params.get("cache_key", None) or ""
+            api_base = hidden_params.get("api_base", None) or ""
+            response_cost = hidden_params.get("response_cost", None) or ""
+            additional_headers: dict = hidden_params.get("additional_headers", {}) or {}
+
+            fastapi_response.headers.update(
+                ProxyBaseLLMRequestProcessing.get_custom_headers(
+                    user_api_key_dict=user_api_key_dict,
+                    model_id=model_id,
+                    cache_key=cache_key,
+                    api_base=api_base,
+                    version=version,
+                    response_cost=response_cost,
+                    request_data=data,
+                    hidden_params=hidden_params,
+                    **additional_headers,
+                )
+            )
+
             selected_data_generator = (
                 ProxyBaseLLMRequestProcessing.async_sse_data_generator(
                     response=response,
@@ -202,7 +209,33 @@ async def anthropic_response(  # noqa: PLR0915
 
         ### CALL HOOKS ### - modify outgoing data
         response = await proxy_logging_obj.post_call_success_hook(
-            data=data, user_api_key_dict=user_api_key_dict, response=response # type: ignore
+            data=data, user_api_key_dict=user_api_key_dict, response=response  # type: ignore
+        )
+
+        # Extract hidden_params AFTER hook call (hook may have modified response)
+        # Handle both dict and object responses
+        if isinstance(response, dict):
+            hidden_params = response.get("_hidden_params", {}) or {}
+        else:
+            hidden_params = getattr(response, "_hidden_params", {}) or {}
+        model_id = hidden_params.get("model_id", None) or ""
+        cache_key = hidden_params.get("cache_key", None) or ""
+        api_base = hidden_params.get("api_base", None) or ""
+        response_cost = hidden_params.get("response_cost", None) or ""
+        additional_headers = hidden_params.get("additional_headers", {}) or {}
+
+        fastapi_response.headers.update(
+            ProxyBaseLLMRequestProcessing.get_custom_headers(
+                user_api_key_dict=user_api_key_dict,
+                model_id=model_id,
+                cache_key=cache_key,
+                api_base=api_base,
+                version=version,
+                response_cost=response_cost,
+                request_data=data,
+                hidden_params=hidden_params,
+                **additional_headers,
+            )
         )
 
         verbose_proxy_logger.debug("\nResponse from Litellm:\n{}".format(response))
