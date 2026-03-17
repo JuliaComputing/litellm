@@ -62,6 +62,13 @@ from litellm.proxy.litellm_pre_call_utils import add_litellm_data_to_request
 from litellm.types.utils import ModelResponse, ModelResponseStream, Usage
 
 
+def _get_hidden_params(response: Any) -> dict:
+    """Extract _hidden_params from a response object or dict."""
+    if isinstance(response, dict):
+        return response.get("_hidden_params", {}) or {}
+    return getattr(response, "_hidden_params", {}) or {}
+
+
 async def _parse_event_data_for_error(event_line: Union[str, bytes]) -> Optional[int]:
     """Parses an event line and returns an error code if present, else None."""
     event_line = (
@@ -273,7 +280,7 @@ def _override_openai_response_model(
         return
 
     # Check if a fallback occurred - if so, preserve the actual model used
-    hidden_params = getattr(response_obj, "_hidden_params", {}) or {}
+    hidden_params = _get_hidden_params(response_obj)
     if isinstance(hidden_params, dict):
         fallback_headers = hidden_params.get("additional_headers", {}) or {}
         attempted_fallbacks = fallback_headers.get(
@@ -873,7 +880,7 @@ class ProxyBaseLLMRequestProcessing:
 
         response = responses[1]
 
-        hidden_params = getattr(response, "_hidden_params", {}) or {}
+        hidden_params = _get_hidden_params(response)
         model_id = self._get_model_id_from_response(hidden_params, self.data)
 
         cache_key, api_base, response_cost = (
@@ -1000,9 +1007,7 @@ class ProxyBaseLLMRequestProcessing:
                 log_context=f"litellm_call_id={logging_obj.litellm_call_id}",
             )
 
-        hidden_params = (
-            getattr(response, "_hidden_params", {}) or {}
-        )  # get any updated response headers
+        hidden_params = _get_hidden_params(response)  # get any updated response headers
         additional_headers = hidden_params.get("additional_headers", {}) or {}
 
         fastapi_response.headers.update(

@@ -15,6 +15,7 @@ from litellm.proxy.common_request_processing import (
     ProxyConfig,
     _extract_error_from_sse_chunk,
     _get_cost_breakdown_from_logging_obj,
+    _get_hidden_params,
     _override_openai_response_model,
     _parse_event_data_for_error,
     create_response,
@@ -1622,3 +1623,42 @@ class TestDDSpanTaggerTagRequest:
             )
 
         mock_set_tag.assert_called_once_with("litellm.requested_model", "claude-3-5-sonnet")
+
+
+class TestGetHiddenParams:
+    """Tests for _get_hidden_params helper that extracts _hidden_params from response objects or dicts."""
+
+    def test_dict_response_with_hidden_params(self):
+        response = {"_hidden_params": {"api_base": "http://example.com", "additional_headers": {"x-foo": "bar"}}}
+        result = _get_hidden_params(response)
+        assert result == {"api_base": "http://example.com", "additional_headers": {"x-foo": "bar"}}
+
+    def test_dict_response_without_hidden_params(self):
+        response = {"some_key": "value"}
+        result = _get_hidden_params(response)
+        assert result == {}
+
+    def test_dict_response_with_none_hidden_params(self):
+        response = {"_hidden_params": None}
+        result = _get_hidden_params(response)
+        assert result == {}
+
+    def test_object_response_with_hidden_params(self):
+        response = MagicMock()
+        response._hidden_params = {"cache_key": "abc"}
+        result = _get_hidden_params(response)
+        assert result == {"cache_key": "abc"}
+
+    def test_object_response_without_hidden_params(self):
+        class NoParams:
+            pass
+        result = _get_hidden_params(NoParams())
+        assert result == {}
+
+    def test_none_response(self):
+        result = _get_hidden_params(None)
+        assert result == {}
+
+    def test_empty_dict_response(self):
+        result = _get_hidden_params({})
+        assert result == {}
