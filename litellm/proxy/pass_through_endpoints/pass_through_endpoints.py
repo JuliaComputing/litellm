@@ -611,6 +611,7 @@ async def pass_through_request(  # noqa: PLR0915
     cost_per_request: Optional[float] = None,
     custom_llm_provider: Optional[str] = None,
     guardrails_config: Optional[dict] = None,
+    timeout: Optional[float] = None,
 ):
     """
     Pass through endpoint handler, makes the httpx request for pass-through endpoints and ensures logging hooks are called
@@ -733,9 +734,10 @@ async def pass_through_request(  # noqa: PLR0915
             data=_parsed_body,
             call_type="pass_through_endpoint",
         )
+        _timeout = timeout if timeout is not None else 600
         async_client_obj = get_async_httpx_client(
             llm_provider=httpxSpecialProvider.PassThroughEndpoint,
-            params={"timeout": 600},
+            params={"timeout": _timeout},
         )
         async_client = async_client_obj.client
         passthrough_logging_payload = PassthroughStandardLoggingPayload(
@@ -1101,6 +1103,7 @@ def create_pass_through_route(
     query_params: Optional[dict] = None,
     default_query_params: Optional[dict] = None,
     guardrails: Optional[Dict[str, Any]] = None,
+    timeout: Optional[float] = None,
 ):
     # check if target is an adapter.py or a url
     from litellm._uuid import uuid
@@ -1174,6 +1177,7 @@ def create_pass_through_route(
                 "merge_query_params": _merge_query_params,
                 "cost_per_request": cost_per_request,
                 "guardrails": None,
+                "timeout": timeout,
             }
 
             if passthrough_params is not None:
@@ -1193,6 +1197,7 @@ def create_pass_through_route(
             )
             param_guardrails = target_params.get("guardrails", None)
             param_default_query_params = target_params.get("default_query_params", None)
+            param_timeout = target_params.get("timeout", None)
 
             # Construct the full target URL with subpath if needed
             full_target = (
@@ -1236,6 +1241,7 @@ def create_pass_through_route(
                 cost_per_request=cast(Optional[float], param_cost_per_request),
                 custom_llm_provider=custom_llm_provider,
                 guardrails_config=cast(Optional[dict], param_guardrails),
+                timeout=cast(Optional[float], param_timeout),
             )
 
     return endpoint_func
@@ -1881,6 +1887,7 @@ class InitPassThroughEndpointHelpers:
         guardrails: Optional[dict] = None,
         methods: Optional[List[str]] = None,
         default_query_params: Optional[dict] = None,
+        timeout: Optional[float] = None,
     ):
         """Add exact path route for pass-through endpoint"""
         # Default to all methods if none specified (backward compatibility)
@@ -1920,6 +1927,7 @@ class InitPassThroughEndpointHelpers:
                 cost_per_request=cost_per_request,
                 default_query_params=default_query_params,
                 guardrails=guardrails,
+                timeout=timeout,
             ),
             methods=methods,
             dependencies=dependencies,
@@ -1940,6 +1948,7 @@ class InitPassThroughEndpointHelpers:
                 "dependencies": dependencies,
                 "cost_per_request": cost_per_request,
                 "guardrails": guardrails,
+                "timeout": timeout,
             },
         }
 
@@ -1957,6 +1966,7 @@ class InitPassThroughEndpointHelpers:
         guardrails: Optional[dict] = None,
         methods: Optional[List[str]] = None,
         default_query_params: Optional[dict] = None,
+        timeout: Optional[float] = None,
     ):
         """Add wildcard route for sub-paths"""
         # Default to all methods if none specified (backward compatibility)
@@ -1997,6 +2007,7 @@ class InitPassThroughEndpointHelpers:
                 cost_per_request=cost_per_request,
                 default_query_params=default_query_params,
                 guardrails=guardrails,
+                timeout=timeout,
             ),
             methods=methods,
             dependencies=dependencies,
@@ -2017,6 +2028,7 @@ class InitPassThroughEndpointHelpers:
                 "dependencies": dependencies,
                 "cost_per_request": cost_per_request,
                 "guardrails": guardrails,
+                "timeout": timeout,
             },
         }
 
@@ -2230,6 +2242,9 @@ async def initialize_pass_through_endpoints(
         # Get guardrails config if present
         _guardrails = endpoint.get("guardrails", None)
 
+        # Get timeout if present
+        _timeout = endpoint.get("timeout", None)
+
         # Get methods list if present (None means all methods for backward compatibility)
         _methods = endpoint.get("methods", None)
 
@@ -2250,6 +2265,7 @@ async def initialize_pass_through_endpoints(
             guardrails=_guardrails,
             methods=_methods,
             default_query_params=_default_query_params,
+            timeout=_timeout,
         )
 
         # Generate route key with methods for tracking
@@ -2274,6 +2290,7 @@ async def initialize_pass_through_endpoints(
                 guardrails=_guardrails,
                 methods=_methods,
                 default_query_params=_default_query_params,
+                timeout=_timeout,
             )
 
             visited_endpoints.add(f"{endpoint_id}:subpath:{_path}:{methods_str}")
