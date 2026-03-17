@@ -1878,6 +1878,7 @@ class BaseLLMHTTPHandler:
         litellm_params: GenericLiteLLMParams,
         api_key: Optional[str],
         model: str,
+        timeout: Optional[Union[float, httpx.Timeout]] = None,
     ) -> httpx.Response:
         max_attempts = max(provider_config.max_retry_on_anthropic_messages_http_error, 1)
         litellm_params_dict = dict(litellm_params)
@@ -1890,6 +1891,7 @@ class BaseLLMHTTPHandler:
                     data=signed_json_body or json.dumps(request_body),
                     stream=stream or False,
                     logging_obj=logging_obj,
+                    timeout=timeout,
                 )
                 response.raise_for_status()
                 return response
@@ -1951,6 +1953,7 @@ class BaseLLMHTTPHandler:
 
         # Prepare headers
         kwargs = kwargs or {}
+        timeout: Optional[Union[float, httpx.Timeout]] = kwargs.get("timeout", None)
         provider_specific_header = cast(
             Optional[litellm.types.utils.ProviderSpecificHeader],
             kwargs.get("provider_specific_header", None),
@@ -2078,6 +2081,7 @@ class BaseLLMHTTPHandler:
             litellm_params=litellm_params,
             api_key=api_key,
             model=model,
+            timeout=timeout,
         )
 
         # used for logging + cost tracking
