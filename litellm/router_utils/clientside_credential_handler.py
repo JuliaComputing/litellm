@@ -73,6 +73,21 @@ def is_clientside_credential(request_kwargs: dict) -> bool:
     return any(key in request_kwargs for key in clientside_credential_keys)
 
 
+def is_clientside_credential_deployment(model: dict) -> bool:
+    """
+    True if this deployment is a synthetic per-request clientside-credential
+    deployment created by Router._handle_clientside_credential. Such deployments
+    bake a single caller's api_key/api_base into litellm_params and must not be
+    selected for requests that did not supply that same clientside credential
+    (otherwise another caller's key would be reused).
+    """
+    model_info = model.get("model_info") or {}
+    return bool(
+        model_info.get("clientside_credential")
+        or model_info.get("original_model_id")  # redundant fallback marker
+    )
+
+
 def get_dynamic_litellm_params(litellm_params: dict, request_kwargs: dict) -> dict:
     """
     Generate a unique model_id for the deployment.
