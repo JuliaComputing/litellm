@@ -14,6 +14,7 @@ import hashlib
 import inspect
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -95,8 +96,10 @@ from litellm.router_utils.batch_utils import (
 )
 from litellm.router_utils.client_initalization_utils import InitalizeCachedClient
 from litellm.router_utils.clientside_credential_handler import (
+    clientside_credential_keys,
     get_dynamic_litellm_params,
     is_clientside_credential,
+    is_clientside_credential_deployment,
 )
 from litellm.router_utils.common_utils import (
     filter_team_based_models,
@@ -503,6 +506,19 @@ class Router:
             self.allowed_fails = litellm.allowed_fails
         self.cooldown_time = cooldown_time or DEFAULT_COOLDOWN_TIME_SECONDS
         self.cooldown_cache = CooldownCache(cache=self.cache, default_cooldown_time=self.cooldown_time)
+        # JH: bound growth of synthetic per-key clientside-credential deployments
+        # (created by _handle_clientside_credential and never otherwise removed).
+        self.clientside_credential_ttl = int(
+            os.getenv("LITELLM_CLIENTSIDE_CREDENTIAL_TTL", 3600)
+        )  # evict a synthetic deployment idle (unused) for this many seconds
+        self.clientside_credential_max_count = int(
+            os.getenv("LITELLM_CLIENTSIDE_CREDENTIAL_MAX_COUNT", 1000)
+        )  # hard LRU cap as a memory backstop
+        self._clientside_prune_interval = int(
+            os.getenv("LITELLM_CLIENTSIDE_PRUNE_INTERVAL", 60)
+        )  # min seconds between sweeps (throttle)
+        self.clientside_credential_last_used: Dict[str, float] = {}
+        self._last_clientside_prune: float = 0.0
         self.disable_cooldowns = disable_cooldowns
         self.enable_health_check_routing = enable_health_check_routing
         self.enable_weighted_failover = enable_weighted_failover
@@ -2866,12 +2882,17 @@ class Router:
         original_model_id = model_info.get("id")
         model_info["id"] = _model_id
         model_info["original_model_id"] = original_model_id
+        model_info["clientside_credential"] = True  # mark synthetic per-key deployment (JH security fix)
         deployment_pydantic_obj = Deployment(
             model_name=model_group,
             litellm_params=LiteLLM_Params(**dynamic_litellm_params),
             model_info=model_info,
         )
         self.upsert_deployment(deployment=deployment_pydantic_obj)  # add new deployment to router
+        # JH: track last-use and opportunistically prune stale synthetic
+        # deployments so the shared model_list does not grow unbounded.
+        self.clientside_credential_last_used[_model_id] = time.time()
+        self._maybe_prune_clientside_deployments()
         return deployment_pydantic_obj
 
     @staticmethod
@@ -8185,6 +8206,45 @@ class Router:
         except Exception:
             return None
 
+    def _maybe_prune_clientside_deployments(self) -> None:
+        """
+        Bound the growth of synthetic per-key clientside-credential deployments
+        created by _handle_clientside_credential. Throttled, synchronous sweep:
+          - evict any synthetic unused for > clientside_credential_ttl seconds, then
+          - if still above clientside_credential_max_count, LRU-evict the oldest.
+
+        Synchronous and iterates a model_list snapshot, so it cannot interleave
+        with synchronous deployment selection on the same event loop.
+        """
+        now = time.time()
+        if now - self._last_clientside_prune < self._clientside_prune_interval:
+            return
+        self._last_clientside_prune = now
+
+        survivors: List[Tuple[str, float]] = []  # (model_id, last_used) for kept synthetics
+        for d in [m for m in self.model_list if is_clientside_credential_deployment(m)]:
+            mid = (d.get("model_info") or {}).get("id")
+            if mid is None:
+                continue
+            last_used = self.clientside_credential_last_used.get(mid)
+            if last_used is None:
+                # First time we see it here (e.g. created before tracking) —
+                # lazily stamp and treat as fresh rather than evicting blindly.
+                self.clientside_credential_last_used[mid] = now
+                survivors.append((mid, now))
+            elif now - last_used > self.clientside_credential_ttl:
+                self.delete_deployment(mid)
+                self.clientside_credential_last_used.pop(mid, None)
+            else:
+                survivors.append((mid, last_used))
+
+        if len(survivors) > self.clientside_credential_max_count:
+            survivors.sort(key=lambda t: t[1])  # oldest first
+            n_evict = len(survivors) - self.clientside_credential_max_count
+            for mid, _ in survivors[:n_evict]:
+                self.delete_deployment(mid)
+                self.clientside_credential_last_used.pop(mid, None)
+
     def _get_router_deployment_budget_limiter(
         self,
     ) -> Optional[RouterBudgetLimiting]:
@@ -9974,6 +10034,29 @@ class Router:
         ## get healthy deployments
         ### get all deployments
         healthy_deployments = self._get_all_deployments(model_name=model, team_id=request_team_id)
+
+        # SECURITY (JH fix; root cause upstream PR #8966, upstream issue #17115):
+        # Synthetic per-key clientside-credential deployments are upserted into
+        # the shared model_list and would otherwise be candidates for EVERY
+        # request to this model group. Drop them unless THIS request carries a
+        # matching clientside credential: a no-key request sees none (else it
+        # could be routed onto and reuse another caller's baked key); a keyed
+        # request sees only its OWN synthetic deployment.
+        _req_kwargs = request_kwargs or {}
+        _req_is_clientside = is_clientside_credential(_req_kwargs)
+        healthy_deployments = [
+            d
+            for d in healthy_deployments
+            if not is_clientside_credential_deployment(d)
+            or (
+                _req_is_clientside
+                and all(
+                    (d.get("litellm_params", {}) or {}).get(k) == _req_kwargs.get(k)
+                    for k in clientside_credential_keys
+                )
+            )
+        ]
+
         _pre_model_access_group_filter_len = len(healthy_deployments)
         healthy_deployments = self._filter_deployments_by_model_access_groups(
             model=model,

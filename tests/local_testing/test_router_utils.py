@@ -427,6 +427,97 @@ def test_router_handle_clientside_credential():
     assert len(router.get_model_list()) == 2
 
 
+def test_router_clientside_credential_per_key_scoped_selection():
+    """
+    Regression for the clientside-credential synthetic-deployment leak
+    (root cause upstream PR #8966; upstream issue #17115; JuliaHub #22864).
+
+    When a request supplies a clientside api_key, the router upserts a synthetic
+    per-key deployment into the shared model_list under the public model group
+    name. Without scoping, a later request could be load-balanced onto another
+    caller's synthetic deployment and reuse their key. The fix scopes selection:
+    a no-key request sees only config deployments; a keyed request sees config
+    deployments plus only its own matching synthetic.
+
+    Deterministic: asserts on the candidate set, independent of random.choice.
+    """
+    base = {
+        "model_name": "claude-opus-4-8",
+        "litellm_params": {
+            "model": "anthropic/claude-opus-4-8",
+            "api_key": "CONFIGKEY",
+        },
+        "model_info": {"id": "base-1"},
+    }
+    router = Router(model_list=[base])
+
+    dep_a = router._handle_clientside_credential(
+        deployment=base,
+        kwargs={"api_key": "USERKEY_A", "metadata": {"model_group": "claude-opus-4-8"}},
+        function_name="acompletion",
+    )
+    dep_b = router._handle_clientside_credential(
+        deployment=base,
+        kwargs={"api_key": "USERKEY_B", "metadata": {"model_group": "claude-opus-4-8"}},
+        function_name="acompletion",
+    )
+    assert dep_a.litellm_params.api_key == "USERKEY_A"
+    assert dep_b.litellm_params.api_key == "USERKEY_B"
+    assert len(router.get_model_list()) == 3  # base + two synthetics persisted
+
+    def candidate_keys(request_kwargs):
+        _, healthy = router._common_checks_available_deployment(
+            model="claude-opus-4-8", request_kwargs=request_kwargs
+        )
+        return sorted(d["litellm_params"].get("api_key") for d in healthy)
+
+    # (1) NO-key request: ONLY the config deployment.
+    assert candidate_keys({}) == ["CONFIGKEY"]
+    # (2) Keyed (USERKEY_A): config + its OWN synthetic, NOT USERKEY_B's.
+    assert candidate_keys({"api_key": "USERKEY_A"}) == ["CONFIGKEY", "USERKEY_A"]
+    # (3) Symmetric for USERKEY_B.
+    assert candidate_keys({"api_key": "USERKEY_B"}) == ["CONFIGKEY", "USERKEY_B"]
+
+
+def test_router_prunes_stale_clientside_credential_deployments():
+    """
+    Synthetic per-key clientside-credential deployments unused beyond a TTL are
+    evicted, bounding memory growth (JuliaHub #22864; upstream PR #8966 / #17115).
+    Deterministic: backdates last-used timestamps rather than sleeping.
+    """
+    base = {
+        "model_name": "claude-opus-4-8",
+        "litellm_params": {
+            "model": "anthropic/claude-opus-4-8",
+            "api_key": "CONFIGKEY",
+        },
+        "model_info": {"id": "base-1"},
+    }
+    router = Router(model_list=[base])
+    router.clientside_credential_ttl = 3600
+    router._clientside_prune_interval = 0  # disable throttle for the test
+
+    def mk(key):
+        dep = router._handle_clientside_credential(
+            deployment=base,
+            kwargs={"api_key": key, "metadata": {"model_group": "claude-opus-4-8"}},
+            function_name="acompletion",
+        )
+        return dep.model_info.id
+
+    id_a, id_b = mk("USERKEY_A"), mk("USERKEY_B")
+    assert len(router.get_model_list()) == 3
+
+    router.clientside_credential_last_used[id_a] = 0.0  # epoch -> stale
+    router.clientside_credential_last_used[id_b] = time.time()  # fresh
+    router._maybe_prune_clientside_deployments()
+
+    ids = {d["model_info"]["id"] for d in router.get_model_list()}
+    assert id_a not in ids  # stale synthetic evicted
+    assert id_b in ids and "base-1" in ids  # fresh synthetic + config kept
+    assert id_a not in router.clientside_credential_last_used  # side dict cleaned
+
+
 def test_router_get_async_openai_model_client():
     router = Router(
         model_list=[
