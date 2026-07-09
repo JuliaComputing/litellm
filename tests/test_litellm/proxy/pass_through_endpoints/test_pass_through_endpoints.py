@@ -1091,6 +1091,52 @@ def test_resolve_llm_passthrough_timeout_precedence():
         assert resolve_llm_passthrough_timeout() == 6.0
 
 
+def test_resolve_llm_passthrough_timeout_stream_timeout_precedence():
+    # stream_timeout wins over timeout for streaming requests, mirroring Router._get_stream_timeout
+    assert (
+        resolve_llm_passthrough_timeout(
+            kwargs={"stream_timeout": 1, "timeout": 30},
+            stream=True,
+        )
+        == 1.0
+    )
+    # non-streaming requests ignore stream_timeout entirely
+    assert (
+        resolve_llm_passthrough_timeout(
+            kwargs={"stream_timeout": 1, "timeout": 30},
+            stream=False,
+        )
+        == 30.0
+    )
+    # litellm_params stream_timeout is checked when kwargs has none
+    assert (
+        resolve_llm_passthrough_timeout(
+            kwargs={"timeout": 30},
+            litellm_params={"stream_timeout": 2},
+            stream=True,
+        )
+        == 2.0
+    )
+    # router_stream_timeout is a last resort before falling back to the non-stream chain
+    assert (
+        resolve_llm_passthrough_timeout(
+            router_timeout=30,
+            router_stream_timeout=5,
+            stream=True,
+        )
+        == 5.0
+    )
+    # no stream_timeout configured anywhere -> falls back to the non-stream chain
+    assert (
+        resolve_llm_passthrough_timeout(
+            kwargs={"timeout": 30},
+            router_stream_timeout=None,
+            stream=True,
+        )
+        == 30.0
+    )
+
+
 @pytest.mark.asyncio
 async def test_pass_through_request_uses_resolved_timeout():
     with patch("litellm.proxy.proxy_server.proxy_logging_obj") as mock_proxy_logging:
