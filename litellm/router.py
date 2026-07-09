@@ -2987,6 +2987,8 @@ class Router:
                 kwargs=kwargs,
                 litellm_params=deployment["litellm_params"],
                 router_timeout=_router_timeout,
+                stream=bool(kwargs.get("stream", False)),
+                router_stream_timeout=self.stream_timeout,
             )
         else:
             kwargs["timeout"] = self._get_timeout(kwargs=kwargs, data=deployment["litellm_params"])

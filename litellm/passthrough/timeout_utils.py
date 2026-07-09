@@ -34,15 +34,28 @@ def resolve_llm_passthrough_timeout(
     kwargs: Optional[dict] = None,
     litellm_params: Optional[dict] = None,
     router_timeout: Optional[float] = None,
+    stream: bool = False,
+    router_stream_timeout: Optional[float] = None,
 ) -> float:
     """
     Resolve upstream httpx timeout for SDK native passthrough (e.g. Bedrock /converse).
 
     Precedence: kwargs timeout/request_timeout -> litellm_params timeout/request_timeout
     -> router_timeout -> general_settings.pass_through_request_timeout -> 600s default.
+
+    For streaming requests, kwargs/litellm_params stream_timeout and router_stream_timeout
+    are checked ahead of the rest of the chain, mirroring Router._get_stream_timeout.
     """
     kwargs = kwargs or {}
     litellm_params = litellm_params or {}
+
+    if stream:
+        for source in (kwargs, litellm_params):
+            val = source.get("stream_timeout")
+            if val is not None:
+                return float(val)
+        if router_stream_timeout is not None:
+            return float(router_stream_timeout)
 
     for source in (kwargs, litellm_params):
         for key in ("timeout", "request_timeout"):
