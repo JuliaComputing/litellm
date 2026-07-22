@@ -59,8 +59,9 @@ class GithubCopilotEmbeddingConfig(BaseEmbeddingConfig):
         Validate environment and set up headers for GitHub Copilot API.
         """
         try:
-            # Get GitHub Copilot API key via OAuth
-            api_key = self.authenticator.get_api_key()
+            # Get GitHub Copilot API key: a caller-supplied (clientside /
+            # per-user) credential wins over the file-backed authenticator
+            api_key = api_key or self.authenticator.get_api_key()
 
             if not api_key:
                 raise AuthenticationError(
