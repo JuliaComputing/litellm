@@ -2,12 +2,27 @@
 Constants for Copilot integration
 """
 
+import os
 from typing import Optional, Union
 from uuid import uuid4
 
 import httpx
 
 from litellm.llms.base_llm.chat.transformation import BaseLLMException
+
+
+def github_copilot_non_interactive() -> bool:
+    """
+    True when the interactive device-code login must never run (server
+    deployments where per-user credentials are injected per request as
+    clientside api_key/api_base instead of coming from the token files).
+    """
+    return os.getenv("GITHUB_COPILOT_NON_INTERACTIVE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
 
 # Constants
 COPILOT_VERSION = "0.26.7"

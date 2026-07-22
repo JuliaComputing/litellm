@@ -518,6 +518,73 @@ def test_router_prunes_stale_clientside_credential_deployments():
     assert id_a not in router.clientside_credential_last_used  # side dict cleaned
 
 
+def test_router_clientside_credential_scoping_github_copilot(monkeypatch):
+    """
+    github_copilot flavor of the per-key scoping regression (JuliaHub #22864):
+    per-user Copilot keys are injected as clientside api_key AND api_base, the
+    config deployment carries no api_key at all, and two users can share the
+    same api_base (same Copilot plan) while holding different keys.
+    """
+    # Router._add_deployment resolves the provider key at registration time;
+    # without this, an unseeded authenticator would start the interactive
+    # device-code login (and then fail Router init).
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    base = {
+        "model_name": "claude-sonnet-4.6",
+        "litellm_params": {
+            "model": "github_copilot/claude-sonnet-4.6",
+            # no api_key: per-user credentials are injected per request
+        },
+        "model_info": {"id": "copilot-base-1", "base_model": "claude-sonnet-4-6"},
+    }
+    router = Router(model_list=[base])
+    shared_base = "https://api.individual.githubcopilot.com"
+
+    def mk(key):
+        return router._handle_clientside_credential(
+            deployment=base,
+            kwargs={
+                "api_key": key,
+                "api_base": shared_base,
+                "metadata": {"model_group": "claude-sonnet-4.6"},
+            },
+            function_name="acompletion",
+        )
+
+    dep_a, dep_b = mk("COPILOT_KEY_A"), mk("COPILOT_KEY_B")
+    assert len(router.get_model_list()) == 3
+
+    # synthetic deployments keep the config model_info (base_model pricing)
+    # alongside the clientside_credential marker
+    assert dep_a.model_info.base_model == "claude-sonnet-4-6"
+    assert dep_a.model_info.clientside_credential is True
+
+    def candidate_keys(request_kwargs):
+        _, healthy = router._common_checks_available_deployment(
+            model="claude-sonnet-4.6", request_kwargs=request_kwargs
+        )
+        return {
+            d["litellm_params"].get("api_key") for d in healthy
+        }  # config deployment contributes None
+
+    # no-key request (e.g. token counting / health check): config only
+    assert candidate_keys({}) == {None}
+    # same api_base, different keys: each user sees only their own synthetic
+    assert candidate_keys({"api_key": "COPILOT_KEY_A", "api_base": shared_base}) == {
+        None,
+        "COPILOT_KEY_A",
+    }
+    assert candidate_keys({"api_key": "COPILOT_KEY_B", "api_base": shared_base}) == {
+        None,
+        "COPILOT_KEY_B",
+    }
+    # key rotation (same user, new minted key): old synthetic no longer visible
+    mk("COPILOT_KEY_A_ROTATED")
+    assert candidate_keys(
+        {"api_key": "COPILOT_KEY_A_ROTATED", "api_base": shared_base}
+    ) == {None, "COPILOT_KEY_A_ROTATED"}
+
+
 def test_router_get_async_openai_model_client():
     router = Router(
         model_list=[
