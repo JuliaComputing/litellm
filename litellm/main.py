@@ -2483,8 +2483,13 @@ def _complete_custom_openai(
             get_copilot_default_headers,
         )
 
-        copilot_auth: Final = Authenticator()
-        copilot_api_key: Final = copilot_auth.get_api_key()
+        # a caller-supplied (clientside / per-user) key was already resolved
+        # into api_key above; only fall back to the global file-backed
+        # authenticator when no key is present
+        copilot_api_key = api_key
+        if copilot_api_key is None:
+            copilot_auth = Authenticator()
+            copilot_api_key = copilot_auth.get_api_key()
         copilot_headers: Final = get_copilot_default_headers(copilot_api_key)
         if extra_headers:
             copilot_headers.update(extra_headers)
