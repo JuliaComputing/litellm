@@ -93,6 +93,100 @@ def test_github_copilot_config_get_openai_compatible_provider_info():
     assert "Failed to get API key" in str(excinfo.value)
 
 
+def test_github_copilot_provider_info_honors_clientside_api_key():
+    """A caller-supplied api_key must win over the global authenticator
+    (per-user Copilot keys are injected as clientside credentials)."""
+    config = GithubCopilotConfig()
+    config.authenticator = MagicMock()
+    config.authenticator.get_api_base.return_value = None
+
+    (
+        api_base,
+        dynamic_api_key,
+        custom_llm_provider,
+    ) = config._get_openai_compatible_provider_info(
+        model="github_copilot/gpt-4",
+        api_base="https://api.individual.githubcopilot.com",
+        api_key="user-copilot-key",
+        custom_llm_provider="github_copilot",
+    )
+
+    assert dynamic_api_key == "user-copilot-key"
+    assert api_base == "https://api.individual.githubcopilot.com"
+    config.authenticator.get_api_key.assert_not_called()
+
+    # even with an unseeded authenticator (raises), a passed api_key must work
+    config.authenticator.get_api_key.side_effect = GetAPIKeyError(
+        message="unseeded",
+        status_code=401,
+    )
+    (
+        _,
+        dynamic_api_key,
+        _,
+    ) = config._get_openai_compatible_provider_info(
+        model="github_copilot/gpt-4",
+        api_base=None,
+        api_key="user-copilot-key",
+        custom_llm_provider="github_copilot",
+    )
+    assert dynamic_api_key == "user-copilot-key"
+
+
+def test_github_copilot_provider_info_non_interactive_returns_none(monkeypatch):
+    """In non-interactive mode an unseeded authenticator must resolve to a
+    None api_key (deployment registration at Router startup must not fail;
+    per-request clientside credentials arrive later)."""
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    config = GithubCopilotConfig()
+    config.authenticator = MagicMock()
+    config.authenticator.get_api_base.return_value = None
+    config.authenticator.get_api_key.side_effect = GetAPIKeyError(
+        message="unseeded",
+        status_code=401,
+    )
+
+    (
+        api_base,
+        dynamic_api_key,
+        custom_llm_provider,
+    ) = config._get_openai_compatible_provider_info(
+        model="github_copilot/gpt-4",
+        api_base=None,
+        api_key=None,
+        custom_llm_provider="github_copilot",
+    )
+
+    assert dynamic_api_key is None
+    assert api_base == "https://api.githubcopilot.com"
+
+
+def test_github_copilot_validate_environment_uses_clientside_api_key():
+    """validate_environment must build the Copilot default headers from a
+    passed api_key without consulting the (possibly unseeded) authenticator."""
+    config = GithubCopilotConfig()
+    config.authenticator = MagicMock()
+    config.authenticator.get_api_key.side_effect = GetAPIKeyError(
+        message="unseeded",
+        status_code=401,
+    )
+
+    headers = config.validate_environment(
+        headers={},
+        model="github_copilot/gpt-4",
+        messages=[{"role": "user", "content": "hi"}],
+        optional_params={},
+        litellm_params={},
+        api_key="user-copilot-key",
+        api_base="https://api.individual.githubcopilot.com",
+    )
+
+    assert headers["Authorization"] == "Bearer user-copilot-key"
+    assert headers["copilot-integration-id"] == "vscode-chat"
+    assert "editor-version" in headers
+    config.authenticator.get_api_key.assert_not_called()
+
+
 @patch("litellm.llms.github_copilot.authenticator.Authenticator.get_api_key")
 @patch("litellm.main.openai_chat_completions.completion")
 @patch("litellm.llms.openai.openai.OpenAIChatCompletion.completion")
