@@ -15,6 +15,7 @@ from .common_utils import (
     GetAPIKeyError,
     GetDeviceCodeError,
     RefreshAPIKeyError,
+    github_copilot_non_interactive,
 )
 
 # Constants (default values — overridable via environment variables at call time)
@@ -56,6 +57,15 @@ class Authenticator:
                     return access_token
         except OSError:
             verbose_logger.warning("No existing access token found or error reading file")
+
+        if github_copilot_non_interactive():
+            # server deployments must never block a request on the interactive
+            # device-code login (verification-URL prompt + minutes-long poll)
+            raise GetAccessTokenError(
+                message="No GitHub Copilot access token available and interactive "
+                "device-flow login is disabled (GITHUB_COPILOT_NON_INTERACTIVE is set)",
+                status_code=401,
+            )
 
         for attempt in range(3):
             verbose_logger.debug("Access token acquisition attempt %s/3", attempt + 1)
@@ -125,6 +135,14 @@ class Authenticator:
         except RefreshAPIKeyError as e:
             raise GetAPIKeyError(
                 message=f"Failed to refresh API key: {e}",
+                status_code=401,
+            )
+        except GetAccessTokenError as e:
+            # _refresh_api_key calls get_access_token outside its own retry
+            # try-block, so this would otherwise escape get_api_key entirely
+            # and bypass callers' GetAPIKeyError handling
+            raise GetAPIKeyError(
+                message=f"Failed to get access token: {str(e)}",
                 status_code=401,
             )
 

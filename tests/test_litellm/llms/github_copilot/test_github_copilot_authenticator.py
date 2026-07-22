@@ -103,6 +103,32 @@ class TestGitHubCopilotAuthenticator:
                 authenticator.get_access_token()
             assert authenticator._login.call_count == 3
 
+    def test_get_access_token_non_interactive(self, authenticator, monkeypatch):
+        """Non-interactive mode must fail fast instead of starting the
+        interactive device-code login when no token file exists."""
+        monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+        with (
+            patch.object(authenticator, "_login") as mock_login,
+            patch("builtins.open", side_effect=IOError),
+        ):
+            with pytest.raises(GetAccessTokenError):
+                authenticator.get_access_token()
+            mock_login.assert_not_called()
+
+    def test_get_api_key_wraps_access_token_error(self, authenticator):
+        """A GetAccessTokenError escaping _refresh_api_key must surface as
+        GetAPIKeyError so callers' error handling applies."""
+        with (
+            patch.object(
+                authenticator,
+                "_refresh_api_key",
+                side_effect=GetAccessTokenError(message="no token", status_code=401),
+            ),
+            patch("builtins.open", side_effect=IOError),
+        ):
+            with pytest.raises(GetAPIKeyError):
+                authenticator.get_api_key()
+
     def test_get_api_key_from_file(self, authenticator):
         """Test retrieving an API key from a file."""
         future_time = (datetime.now() + timedelta(hours=1)).timestamp()

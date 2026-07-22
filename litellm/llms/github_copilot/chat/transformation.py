@@ -15,6 +15,7 @@ from ..common_utils import (
     DEFAULT_GITHUB_COPILOT_API_BASE,
     GetAPIKeyError,
     get_copilot_default_headers,
+    github_copilot_non_interactive,
 )
 
 
@@ -41,14 +42,25 @@ class GithubCopilotConfig(OpenAIConfig):
             or os.getenv("GITHUB_COPILOT_API_BASE")
             or DEFAULT_GITHUB_COPILOT_API_BASE
         )
-        try:
-            dynamic_api_key: Final = self.authenticator.get_api_key()
-        except GetAPIKeyError as e:
-            raise AuthenticationError(
-                model=model,
-                llm_provider=custom_llm_provider,
-                message=str(e),
-            )
+        if api_key is not None:
+            # a caller-supplied (clientside / per-user) credential wins; the
+            # global file-backed authenticator is only for the local-CLI case
+            dynamic_api_key: str | None = api_key
+        else:
+            try:
+                dynamic_api_key = self.authenticator.get_api_key()
+            except GetAPIKeyError as e:
+                if github_copilot_non_interactive():
+                    # credentials are injected per request; raising here would
+                    # break deployment registration at Router startup
+                    # (Router._add_deployment resolves via get_llm_provider)
+                    dynamic_api_key = None
+                else:
+                    raise AuthenticationError(
+                        model=model,
+                        llm_provider=custom_llm_provider,
+                        message=str(e),
+                    )
         return dynamic_api_base, dynamic_api_key, custom_llm_provider
 
     def _transform_messages(
@@ -94,7 +106,7 @@ class GithubCopilotConfig(OpenAIConfig):
 
         # Add Copilot-specific headers (editor-version, user-agent, etc.)
         try:
-            copilot_api_key: Final = self.authenticator.get_api_key()
+            copilot_api_key = api_key or self.authenticator.get_api_key()
             copilot_headers: Final = get_copilot_default_headers(copilot_api_key)
             validated_headers = {**copilot_headers, **validated_headers}
         except GetAPIKeyError:
