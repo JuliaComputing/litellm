@@ -18,6 +18,7 @@ from ..common_utils import (
     DEFAULT_GITHUB_COPILOT_API_BASE,
     GetAPIKeyError,
     get_copilot_default_headers,
+    github_copilot_non_interactive,
 )
 from ..per_user_auth import require_github_copilot_user_session
 
@@ -53,15 +54,31 @@ class GithubCopilotConfig(OpenAIConfig):
         api_key: str | None,
         custom_llm_provider: str,
     ) -> tuple[str | None, str | None, str]:
-        dynamic_api_base: Final = self.api_base_without_login(api_base)
-        try:
-            dynamic_api_key: Final = self.authenticator.get_api_key()
-        except GetAPIKeyError as e:
-            raise AuthenticationError(
-                model=model,
-                llm_provider=custom_llm_provider,
-                message=str(e),
-            )
+        dynamic_api_base: Final = (
+            api_base
+            or self.authenticator.get_api_base()
+            or os.getenv("GITHUB_COPILOT_API_BASE")
+            or DEFAULT_GITHUB_COPILOT_API_BASE
+        )
+        if api_key is not None:
+            # a caller-supplied (clientside / per-user) credential wins; the
+            # global file-backed authenticator is only for the local-CLI case
+            dynamic_api_key: str | None = api_key
+        else:
+            try:
+                dynamic_api_key = self.authenticator.get_api_key()
+            except GetAPIKeyError as e:
+                if github_copilot_non_interactive():
+                    # credentials are injected per request; raising here would
+                    # break deployment registration at Router startup
+                    # (Router._add_deployment resolves via get_llm_provider)
+                    dynamic_api_key = None
+                else:
+                    raise AuthenticationError(
+                        model=model,
+                        llm_provider=custom_llm_provider,
+                        message=str(e),
+                    )
         return dynamic_api_base, dynamic_api_key, custom_llm_provider
 
     def get_openai_compatible_provider_info(
@@ -125,7 +142,7 @@ class GithubCopilotConfig(OpenAIConfig):
             cast("dict[str, object]", litellm_params)  # cast-ok: litellm_params arrives as an untyped request dict
         )
         session_token: Final = user_session.token if user_session is not None else None
-        validated_headers: Final = {**self._copilot_headers(session_token), **parent_headers}
+        validated_headers: Final = {**self._copilot_headers(session_token if session_token is not None else api_key), **parent_headers}
         if session_token is not None:
             # the caller's stored session token wins unconditionally, even over a
             # caller-supplied api_key or the parent's placeholder Authorization
