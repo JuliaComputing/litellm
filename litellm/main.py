@@ -2899,8 +2899,9 @@ def _complete_custom_openai(
         )
 
         user_session: Final = require_github_copilot_user_session(litellm_params)
+        copilot_api_key: Final = user_session.token if user_session is not None else api_key
         copilot_headers: Final = get_copilot_default_headers(
-            user_session.token if user_session is not None else Authenticator().get_api_key()
+            copilot_api_key if copilot_api_key is not None else Authenticator().get_api_key()
         )
         if extra_headers:
             copilot_headers.update(
