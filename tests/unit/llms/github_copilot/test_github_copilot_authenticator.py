@@ -16,6 +16,24 @@ TENANT_API: Final = "https://api.tenant.githubcopilot.com"
 TRUNCATED_UTF_16: Final = b"\xff\xfe\x00\xd8"
 
 
+@pytest.mark.parametrize("flag", ["1", "true", " YES "])
+def test_non_interactive_login_fails_without_http(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", flag)
+    with respx.mock(assert_all_called=False) as router:
+        with pytest.raises(GetAccessTokenError, match="GITHUB_COPILOT_NON_INTERACTIVE"):
+            Authenticator().get_api_key()
+    assert router.calls.call_count == 0
+
+
+def test_non_interactive_login_still_reads_saved_token(
+    logged_in_token_dir: tuple[Path, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    _, token = logged_in_token_dir
+    assert Authenticator().get_access_token() == token
+
+
 @pytest.fixture
 def logged_in_token_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
     monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))

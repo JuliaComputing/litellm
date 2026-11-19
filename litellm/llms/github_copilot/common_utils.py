@@ -2,6 +2,7 @@
 Constants for Copilot integration
 """
 
+import os
 from collections.abc import MutableMapping
 from typing import Final
 from uuid import uuid4
@@ -16,6 +17,10 @@ EDITOR_PLUGIN_VERSION: Final = f"copilot-chat/{COPILOT_VERSION}"
 USER_AGENT: Final = f"GitHubCopilotChat/{COPILOT_VERSION}"
 API_VERSION: Final = "2025-04-01"
 DEFAULT_GITHUB_COPILOT_API_BASE: Final = "https://api.githubcopilot.com"
+
+
+def github_copilot_non_interactive() -> bool:
+    return os.getenv("GITHUB_COPILOT_NON_INTERACTIVE", "").strip().lower() in ("1", "true", "yes")
 
 
 class GithubCopilotError(BaseLLMException):
