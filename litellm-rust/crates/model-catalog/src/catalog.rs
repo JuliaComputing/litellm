@@ -526,7 +526,11 @@ mod tests {
             catalog.check_size(0, limits).unwrap_err().kind(),
             crate::ErrorKind::BelowMinimum
         );
-        assert!(catalog.check_size(0, IntegrityLimits::new(1, 0.0).unwrap()).is_ok());
+        assert!(
+            catalog
+                .check_size(0, IntegrityLimits::new(1, 0.0).unwrap())
+                .is_ok()
+        );
     }
 
     #[rstest]
@@ -654,20 +658,24 @@ mod tests {
         let body =
             format!(r#"{{{RULES},"latest":{alias},"owner":{{"litellm_provider":"test"}}{extra}}}"#);
         let loaded = Catalog::parse(body.as_bytes()).unwrap();
+        let problems = Catalog::problems(body.as_bytes());
+        assert_eq!(problems.len(), if extra.is_empty() { 1 } else { 2 });
+        assert_eq!(problems[0].path(), "/latest/alias_of");
+        assert_eq!(problems[0].kind(), crate::ErrorKind::InvalidAlias);
+        assert_eq!(loaded.errors[0].path(), "/latest/alias_of");
+        assert_eq!(loaded.errors[0].kind(), crate::ErrorKind::InvalidAlias);
+        if !extra.is_empty() {
+            assert_eq!(problems[1].path(), "/middle/alias_of");
+            assert_eq!(problems[1].kind(), crate::ErrorKind::InvalidAlias);
+        }
+        assert!(loaded.value.lookup("latest").is_none());
         assert!(
             loaded
-                .errors
-                .iter()
-                .any(|error| error.path() == "/latest/alias_of"
-                    && error.kind() == crate::ErrorKind::InvalidAlias)
+                .value
+                .served()
+                .find(|(key, _)| *key == "latest")
+                .is_none()
         );
-        assert!(
-            Catalog::problems(body.as_bytes())
-                .iter()
-                .all(|error| error.kind() == crate::ErrorKind::InvalidAlias)
-        );
-        assert!(loaded.value.lookup("latest").is_none());
-        assert!(loaded.value.served().all(|(key, _)| key != "latest"));
         assert!(loaded.value.lookup("owner").is_some());
     }
 }
