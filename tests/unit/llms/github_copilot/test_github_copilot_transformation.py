@@ -19,6 +19,7 @@ from litellm.llms.github_copilot.common_utils import (
     GetAccessTokenError,
 )
 from litellm.llms.github_copilot.embedding.transformation import GithubCopilotEmbeddingConfig
+from litellm.llms.github_copilot.responses.transformation import GithubCopilotResponsesAPIConfig
 
 
 @pytest.mark.parametrize("api_key", [None, "", "   ", "caller-token"])
@@ -53,6 +54,9 @@ def test_caller_keys_do_not_use_saved_accounts_endpoint(
         assert GithubCopilotEmbeddingConfig().get_complete_url(
             api_base=api_base, api_key=api_key, model="test-model", optional_params={}, litellm_params={}
         ) == f"{expected_base}/embeddings"
+        assert GithubCopilotResponsesAPIConfig().get_complete_url(
+            api_base=api_base, litellm_params={"api_key": api_key}
+        ) == f"{expected_base}/responses"
     assert discovery.called == (not api_base and not caller_key_present)
 
 
