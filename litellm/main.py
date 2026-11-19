@@ -2808,9 +2808,8 @@ def _complete_custom_openai(
     # set API KEY
     api_key = (
         api_key
-        or litellm.api_key  # for deepinfra/perplexity/anyscale/friendliai we check in get_llm_provider and pass in the api key from there
-        or litellm.openai_key
-        or get_secret("OPENAI_API_KEY")
+        if custom_llm_provider == "github_copilot"
+        else api_key or litellm.api_key or litellm.openai_key or get_secret("OPENAI_API_KEY")
     )
 
     headers = headers or litellm.headers
@@ -2832,8 +2831,11 @@ def _complete_custom_openai(
         )
 
         user_session: Final = require_github_copilot_user_session(litellm_params)
+        copilot_api_key: Final = (
+            user_session.token if user_session is not None else api_key if isinstance(api_key, str) else None
+        )
         copilot_headers: Final = get_copilot_default_headers(
-            user_session.token if user_session is not None else Authenticator().get_api_key()
+            copilot_api_key if copilot_api_key and copilot_api_key.strip() else Authenticator().get_api_key()
         )
         if extra_headers:
             copilot_headers.update(
