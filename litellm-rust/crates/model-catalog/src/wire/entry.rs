@@ -10,7 +10,6 @@ use crate::wire::flat_key::FlatKey;
 
 pub type Fields = Map<String, Value>;
 
-/// Upstream extensions preserved verbatim but not interpreted for billing or model behavior.
 pub const KNOWN_UNSUPPORTED_FIELDS: &[&str] = &[
     "fedramp_uplift_multiplier",
     "thinking_on_by_default",
