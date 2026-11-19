@@ -76,7 +76,8 @@ impl CatalogRows {
     }
 
     fn fields(&self, key: &str) -> Option<&Fields> {
-        Some(self.entries.get(self.owner(key))?.fields())
+        let fields = self.entries.get(self.owner(key))?.fields();
+        (!fields.contains_key("alias_of")).then_some(fields)
     }
 }
 
@@ -92,7 +93,7 @@ impl Rows for CatalogRows {
     fn stamp(&self) -> Self::Stamp {}
 
     fn contains(&self, key: &str) -> bool {
-        self.entries.contains_key(key) || self.aliases.contains_key(key)
+        self.fields(key).is_some()
     }
 
     fn row(&self, key: &str) -> Option<Cow<'_, Fields>> {
@@ -100,8 +101,15 @@ impl Rows for CatalogRows {
     }
 
     fn scan(&self, visit: &mut dyn FnMut(&str, Option<&str>)) {
-        let keys = self.entries.keys().chain(self.aliases.keys());
+        let keys = self.entries.keys().chain(
+            self.aliases
+                .keys()
+                .filter(|key| !self.entries.contains_key(*key)),
+        );
         for key in keys {
+            if self.fields(key).is_none() {
+                continue;
+            }
             let provider = self
                 .fields(key)
                 .and_then(|fields| fields.get("litellm_provider")?.as_str());
@@ -157,7 +165,11 @@ impl Catalog {
                     continue;
                 }
             };
-            let (model, aliases, row_problems) = read_row(&fields);
+            let (model, aliases, row_problems) = if fields.contains_key("alias_of") {
+                (None, None, Vec::new())
+            } else {
+                read_row(&fields)
+            };
             problems.extend(
                 row_problems
                     .into_iter()
@@ -191,6 +203,21 @@ impl Catalog {
             }
         }
 
+        for (name, entry) in &entries {
+            if !entry.fields.contains_key("alias_of") {
+                continue;
+            }
+            match alias_owner(name, &entries, &aliases) {
+                Some(owner) => {
+                    aliases.insert(name.clone(), owner);
+                }
+                None => problems.push(Error::new(
+                    pointer_child(&pointer_for_key(name), "alias_of"),
+                    Repr::InvalidAlias,
+                )),
+            }
+        }
+
         let fallback_generalizations = sections
             .iter()
             .find(|section| section.key == FALLBACK_GENERALIZATIONS)
@@ -220,15 +247,17 @@ impl Catalog {
             Err(fatal) => return vec![fatal],
         };
         let unread = catalog.rows().entries.iter().flat_map(|(model, entry)| {
-            EntryWire::read(entry.fields())
-                .unknown
-                .into_iter()
-                .map(move |(key, _)| {
-                    Error::new(
-                        pointer_child(&pointer_for_key(model), &key),
-                        Repr::UnreadField,
-                    )
-                })
+            let wire = if entry.fields.contains_key("alias_of") {
+                EntryWire::default()
+            } else {
+                EntryWire::read(entry.fields())
+            };
+            wire.unknown.into_iter().map(move |(key, _)| {
+                Error::new(
+                    pointer_child(&pointer_for_key(model), &key),
+                    Repr::UnreadField,
+                )
+            })
         });
         let no_fallback_rules = catalog
             .fallback_rules()
@@ -242,6 +271,16 @@ impl Catalog {
     }
 
     pub fn row_errors(model: &str, fields: &Fields) -> Vec<Error> {
+        if let Some(target) = fields.get("alias_of") {
+            return if fields.len() == 1 && target.is_string() {
+                Vec::new()
+            } else {
+                vec![Error::new(
+                    pointer_child(&pointer_for_key(model), "alias_of"),
+                    Repr::InvalidAlias,
+                )]
+            };
+        }
         let (_, _, errors) = read_row(fields);
         errors
             .into_iter()
@@ -266,10 +305,11 @@ impl Catalog {
         let rows = self.rows();
         rows.entries
             .iter()
-            .map(|(name, entry)| (name.as_str(), entry.fields()))
+            .filter_map(|(name, _)| Some((name.as_str(), rows.fields(name)?)))
             .chain(
                 rows.aliases
                     .iter()
+                    .filter(|(alias, _)| !rows.entries.contains_key(*alias))
                     .map(|(alias, owner)| (alias.as_str(), rows.entries[owner].fields())),
             )
     }
@@ -333,7 +373,8 @@ impl Catalog {
         let mut catalog = self;
         catalog.store.edit(|rows| {
             rows.entries.retain(|name, _| !rejected.contains(name));
-            rows.aliases.retain(|_, owner| !rejected.contains(owner));
+            rows.aliases
+                .retain(|alias, owner| !rejected.contains(alias) && !rejected.contains(owner));
         });
         catalog
             .sections
@@ -415,6 +456,30 @@ fn read_row(fields: &Fields) -> (Option<Model>, Option<Vec<String>>, Vec<Error>)
         Err(mut errors) => {
             errors.extend(timezone_error);
             (None, aliases, errors)
+        }
+    }
+}
+
+fn alias_owner(
+    name: &str,
+    entries: &IndexMap<String, ModelEntry>,
+    aliases: &IndexMap<String, String>,
+) -> Option<String> {
+    let mut current = name;
+    let mut visited = HashSet::new();
+    loop {
+        if !visited.insert(current) {
+            return None;
+        }
+        if let Some(owner) = aliases.get(current) {
+            current = owner;
+            continue;
+        }
+        let fields = entries.get(current)?.fields();
+        match fields.get("alias_of") {
+            None => return Some(current.to_owned()),
+            Some(Value::String(target)) if fields.len() == 1 => current = target,
+            _ => return None,
         }
     }
 }
@@ -514,5 +579,74 @@ mod tests {
                 .iter()
                 .any(|problem| problem.kind() == crate::ErrorKind::NoFallbackRules)
         );
+    }
+
+    #[rstest]
+    #[case::simple(r#"{"alias_of":"owner"}"#, "")]
+    #[case::chain(r#"{"alias_of":"middle"}"#, r#", "middle":{"alias_of":"owner"}"#)]
+    #[case::legacy(r#"{"alias_of":"legacy"}"#, "")]
+    fn alias_of_serves_the_final_owner_and_preserves_written_rows(
+        #[case] alias: &str,
+        #[case] extra: &str,
+    ) {
+        let body = format!(
+            r#"{{{RULES},"latest":{alias},"owner":{{"litellm_provider":"test","aliases":["legacy"]}}{extra}}}"#
+        );
+        let loaded = Catalog::parse(body.as_bytes()).unwrap();
+        assert!(Catalog::problems(body.as_bytes()).is_empty());
+        let catalog = loaded.value;
+        let found = catalog.lookup("LATEST").unwrap();
+        let owner = catalog.lookup("owner").unwrap();
+        assert_eq!(found.canonical_key, "owner");
+        assert!(std::ptr::eq(
+            found.entry.model().unwrap(),
+            owner.entry.model().unwrap()
+        ));
+        assert_eq!(
+            catalog
+                .served()
+                .find(|(key, _)| *key == "latest")
+                .unwrap()
+                .1,
+            owner.entry.fields()
+        );
+        assert_eq!(
+            serde_json::to_value(
+                catalog
+                    .written()
+                    .find(|(key, _)| *key == "latest")
+                    .unwrap()
+                    .1
+            )
+            .unwrap(),
+            serde_json::from_str::<Value>(alias).unwrap()
+        );
+    }
+
+    #[rstest]
+    #[case::missing(r#"{"alias_of":"missing"}"#, "")]
+    #[case::cycle(r#"{"alias_of":"middle"}"#, r#", "middle":{"alias_of":"latest"}"#)]
+    #[case::self_cycle(r#"{"alias_of":"latest"}"#, "")]
+    #[case::mixed(r#"{"alias_of":"owner","mode":"chat"}"#, "")]
+    #[case::not_string(r#"{"alias_of":1}"#, "")]
+    fn invalid_aliases_are_diagnosed_and_not_served(#[case] alias: &str, #[case] extra: &str) {
+        let body =
+            format!(r#"{{{RULES},"latest":{alias},"owner":{{"litellm_provider":"test"}}{extra}}}"#);
+        let loaded = Catalog::parse(body.as_bytes()).unwrap();
+        assert!(
+            loaded
+                .errors
+                .iter()
+                .any(|error| error.path() == "/latest/alias_of"
+                    && error.kind() == crate::ErrorKind::InvalidAlias)
+        );
+        assert!(
+            Catalog::problems(body.as_bytes())
+                .iter()
+                .all(|error| error.kind() == crate::ErrorKind::InvalidAlias)
+        );
+        assert!(loaded.value.lookup("latest").is_none());
+        assert!(loaded.value.served().all(|(key, _)| key != "latest"));
+        assert!(loaded.value.lookup("owner").is_some());
     }
 }

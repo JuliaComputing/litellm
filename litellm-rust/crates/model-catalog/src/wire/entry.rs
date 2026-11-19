@@ -10,6 +10,18 @@ use crate::wire::flat_key::FlatKey;
 
 pub type Fields = Map<String, Value>;
 
+/// Upstream extensions preserved verbatim but not interpreted for billing or model behavior.
+pub const KNOWN_UNSUPPORTED_FIELDS: &[&str] = &[
+    "fedramp_uplift_multiplier",
+    "thinking_on_by_default",
+    "token_count_tool_framing",
+    "token_count_responses_framing",
+    "token_count_responses_tool_framing",
+    "output_cost_per_video",
+    "output_cost_per_video_clip",
+    "output_cost_per_billable_unit",
+];
+
 /// One catalog entry as written. Every non-null key lands in exactly one field, and a known key
 /// with a bad value is kept out and listed in `problems`.
 #[derive(Debug, Default)]
@@ -62,6 +74,9 @@ impl EntryWire {
     }
 
     fn read_open_key(&mut self, reader: &mut Reader<'_>, key: &str, value: &Value) {
+        if KNOWN_UNSUPPORTED_FIELDS.contains(&key) {
+            return;
+        }
         if let Some(read) = self.attributes.read(key, value) {
             if let Err(error) = read {
                 reader
@@ -104,6 +119,29 @@ mod tests {
             .iter()
             .map(|problem| problem.path().to_owned())
             .collect()
+    }
+
+    #[rstest]
+    fn unsupported_extensions_do_not_hide_typos(
+        #[values(
+            "fedramp_uplift_multiplier",
+            "thinking_on_by_default",
+            "token_count_tool_framing",
+            "token_count_responses_framing",
+            "token_count_responses_tool_framing",
+            "output_cost_per_video",
+            "output_cost_per_video_clip",
+            "output_cost_per_billable_unit"
+        )]
+        key: &str,
+    ) {
+        let wire = read(json!({key: 1, "typo_cost": 1}));
+        assert!(wire.problems.is_empty());
+        assert_eq!(
+            wire.unknown,
+            serde_json::from_value::<Fields>(json!({"typo_cost":1})).unwrap()
+        );
+        assert!(wire.prices.is_empty());
     }
 
     #[rstest]

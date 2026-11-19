@@ -58,6 +58,8 @@ attributes! {
     default_reasoning_effort: EffortLevel,
     /// Date the provider deprecates the model, YYYY-MM-DD.
     deprecation_date: IsoDate,
+    deprecation_source: String,
+    successor_model: String,
     gemini_audio_only_live: bool,
     gemini_native_audio: bool,
     input_cost_per_token_cache_hit: UnitPrice,
@@ -302,6 +304,10 @@ mod tests {
     #[case::reasoning_modes("reasoning_modes", json!(["none", "adaptive"]), true)]
     #[case::reasoning_context_not_a_list("reasoning_contexts", json!("reasoning"), false)]
     #[case::reasoning_mode_not_a_string("reasoning_modes", json!([1]), false)]
+    #[case::deprecation_source("deprecation_source", json!("https://example.com"), true)]
+    #[case::successor_model("successor_model", json!("next-model"), true)]
+    #[case::bad_deprecation_source("deprecation_source", json!([]), false)]
+    #[case::bad_successor_model("successor_model", json!(1), false)]
     fn each_attribute_reads_its_own_type(
         #[case] key: &str,
         #[case] value: Value,

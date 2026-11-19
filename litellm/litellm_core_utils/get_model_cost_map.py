@@ -22,7 +22,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from importlib.resources import files
-from itertools import chain
+from itertools import accumulate, chain
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Protocol, cast  # noqa: TID251  # adapts boto3 and botocore's dynamic client responses
@@ -580,6 +580,42 @@ def _alias_groups(alias_owners: Mapping[str, str]) -> Mapping[str, tuple[str, ..
     )
 
 
+def _resolve_alias_of(model_cost: Mapping[str, Mapping[str, object]], name: str) -> Mapping[str, object] | None:
+    def next_target(current: str | None, _: int) -> str | None:
+        entry: Final = model_cost.get(current) if current is not None else None
+        if entry is None or len(entry) != 1:
+            return None
+        target: Final = entry.get("alias_of")
+        return target if isinstance(target, str) else None
+
+    for entry in (
+        model_cost.get(candidate) if candidate is not None else None
+        for candidate in accumulate(range(len(model_cost)), next_target, initial=name)
+    ):
+        if entry is None:
+            return None
+        if "alias_of" not in entry:
+            return entry
+    return None
+
+
+def _expand_alias_of(model_cost: Mapping[str, Mapping[str, object]]) -> Mapping[str, Mapping[str, object]]:
+    def resolved_row(name: str, entry: Mapping[str, object]) -> Mapping[str, object] | None:
+        if "alias_of" not in entry:
+            return entry
+        resolved: Final = _resolve_alias_of(model_cost, name)
+        if resolved is None:
+            verbose_logger.warning(
+                "Invalid alias_of entry for '%s' (mixed keys, missing target or cycle), dropping", name
+            )
+            return None
+        return dict(resolved)
+
+    return MappingProxyType(
+        {name: resolved for name, entry in model_cost.items() if (resolved := resolved_row(name, entry)) is not None}
+    )
+
+
 def _expand_model_aliases(model_cost: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
     """
     Expand ``aliases`` lists in model cost entries into top-level entries.
@@ -595,6 +631,8 @@ def _expand_model_aliases(model_cost: dict[str, dict[str, object]]) -> dict[str,
     keys_with_aliases: Final[list[str]] = []
 
     for model_name, model_info in model_cost.items():
+        if "alias_of" in model_info:
+            continue
         aliases: object = model_info.get("aliases")
         if aliases is None:
             continue
@@ -645,7 +683,7 @@ def _finalize_model_cost_map(model_cost: dict) -> dict:
     raw: Final = model_cost.pop(FALLBACK_GENERALIZATIONS_KEY, None)
     rules: Final = raw.get("rules") if isinstance(raw, dict) else None
     set_fallback_generalizations(rules)
-    return _expand_model_aliases(model_cost)
+    return dict(_expand_alias_of(_expand_model_aliases(model_cost)))
 
 
 def _finalize_loaded_model_cost_map(loaded: ModelCostMapReloaded) -> ModelCostMapReloaded:

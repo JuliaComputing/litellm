@@ -67,6 +67,9 @@ pub(crate) enum Repr {
     #[error("alias {alias:?} already belongs to {taken_by}")]
     #[strum_discriminants(strum(serialize = "alias_taken"))]
     AliasTaken { alias: String, taken_by: String },
+    #[error("alias_of must be the only key and name an existing model without cycles")]
+    #[strum_discriminants(strum(serialize = "invalid_alias"))]
+    InvalidAlias,
     #[error("{first} and {second} price the same meter under the same conditions")]
     #[strum_discriminants(strum(serialize = "duplicate_price"))]
     DuplicatePrice { first: String, second: String },
@@ -141,6 +144,7 @@ impl Error {
             | Repr::UnknownTimezone { .. }
             | Repr::AliasShadowsModel { .. }
             | Repr::AliasTaken { .. }
+            | Repr::InvalidAlias
             | Repr::DuplicatePrice { .. }
             | Repr::SuffixInsideBlock { .. }
             | Repr::TierRange

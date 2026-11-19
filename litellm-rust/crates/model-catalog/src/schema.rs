@@ -150,7 +150,27 @@ fn remove_nullable_optional_fields(value: &mut Value) {
 fn decorate_model_entry(schema: &mut Value) {
     let rates = json!({FLAT_KEY_PATTERN: {"type": "number", "minimum": 0}});
     let object = schema.as_object_mut().unwrap();
-    object.insert("required".into(), json!(["litellm_provider"]));
+    let properties = object
+        .get_mut("properties")
+        .unwrap()
+        .as_object_mut()
+        .unwrap();
+    properties.insert("alias_of".into(), json!({"type": "string"}));
+    for key in crate::wire::KNOWN_UNSUPPORTED_FIELDS {
+        properties.insert((*key).into(), json!({"description": "Preserved upstream extension, not interpreted by LiteLLM Rust."}));
+    }
+    object.insert(
+        "oneOf".into(),
+        json!([
+            {"required": ["litellm_provider"], "not": {"required": ["alias_of"]}},
+            {
+                "type": "object",
+                "properties": {"alias_of": {"type": "string"}},
+                "required": ["alias_of"],
+                "additionalProperties": false
+            }
+        ]),
+    );
     object.insert("additionalProperties".into(), Value::Bool(true));
     object.insert(
         "patternProperties".into(),
@@ -179,6 +199,22 @@ mod tests {
 
     use super::FLAT_KEY_PATTERN;
     use crate::wire::FlatKey;
+
+    #[rstest]
+    #[case::alias(serde_json::json!({"alias_of":"model"}), true)]
+    #[case::mixed(serde_json::json!({"alias_of":"model", "litellm_provider":"test"}), false)]
+    #[case::metadata(serde_json::json!({"alias_of":"model", "source":"url"}), false)]
+    #[case::not_string(serde_json::json!({"alias_of":1}), false)]
+    #[case::empty(serde_json::json!({}), false)]
+    #[case::model(serde_json::json!({"litellm_provider":"test"}), true)]
+    fn alias_schema_requires_only_a_string_target(
+        #[case] row: serde_json::Value,
+        #[case] valid: bool,
+    ) {
+        let schema = super::model_entry_json_schema();
+        let validator = jsonschema::validator_for(schema.as_value()).unwrap();
+        assert_eq!(validator.is_valid(&row), valid);
+    }
 
     #[rstest]
     #[case::input_token("input_cost_per_token")]

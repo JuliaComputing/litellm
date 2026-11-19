@@ -49,6 +49,41 @@ def test_git_blob_id_is_what_git_hash_object_prints():
     assert git_blob_id(b'{"gpt-5.4-mini": {"mode": "chat"}}\n') == "18b9a8381e13a3b38a2128f184f631f95829e987"
 
 
+@pytest.mark.parametrize(
+    "rows,expected",
+    [
+        ({"latest": {"alias_of": "owner"}}, {"latest"}),
+        ({"latest": {"alias_of": "middle"}, "middle": {"alias_of": "owner"}}, {"latest", "middle"}),
+        ({"latest": {"alias_of": "missing"}}, set()),
+        ({"latest": {"alias_of": "middle"}, "middle": {"alias_of": "latest"}}, set()),
+        ({"latest": {"alias_of": "owner", "mode": "chat"}}, set()),
+        ({"latest": {"alias_of": "owner", "aliases": []}}, set()),
+        ({"latest": {"alias_of": 1}}, set()),
+        ({}, set()),
+    ],
+    ids=["simple", "chain", "missing", "cycle", "mixed", "mixed-aliases", "invalid-type", "empty"],
+)
+def test_alias_of_resolves_or_drops_invalid_rows(
+    rows: dict[str, dict[str, object]], expected: set[str], caplog: pytest.LogCaptureFixture
+) -> None:
+    owner: Final = {"litellm_provider": "test", "mode": "chat"}
+    result: Final = _finalize_model_cost_map({"owner": owner, **rows})
+    assert result == {name: owner for name in {"owner"} | expected}
+    assert all(result[name] is not owner for name in expected)
+    if rows and not expected:
+        assert "Invalid alias_of entry" in caplog.text
+
+
+def test_alias_of_can_target_existing_aliases_without_changing_them() -> None:
+    result: Final = _finalize_model_cost_map({
+        "owner": {"litellm_provider": "test", "aliases": ["legacy"]},
+        "latest": {"alias_of": "legacy"},
+    })
+    assert result["latest"] == result["owner"] == result["legacy"]
+    assert result["owner"] is result["legacy"]
+    assert result["latest"] is not result["owner"]
+
+
 def _make_models(n: int) -> dict:
     return {f"model-{i}": {"litellm_provider": "openai", "mode": "chat"} for i in range(n)}
 
