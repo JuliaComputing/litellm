@@ -420,7 +420,11 @@ impl Catalog {
     }
 
     pub fn model_count(&self) -> usize {
-        self.rows().entries.len()
+        self.rows()
+            .entries
+            .values()
+            .filter(|entry| !entry.fields.contains_key("alias_of"))
+            .count()
     }
 
     pub fn model_names(&self) -> impl Iterator<Item = &str> {
@@ -507,6 +511,23 @@ mod tests {
     use super::*;
 
     const RULES: &str = r#""fallback_generalizations":{"rules":[{"name":"family","pattern":"^new-","model_info":{"mode":"chat"}}]}"#;
+
+    #[rstest]
+    #[case::valid(r#"{"alias_of":"owner"}"#)]
+    #[case::invalid(r#"{"alias_of":"missing"}"#)]
+    fn aliases_do_not_satisfy_minimum_model_count(#[case] alias: &str) {
+        let body = format!(
+            r#"{{{RULES},"latest":{alias},"owner":{{"litellm_provider":"test","aliases":["legacy"]}}}}"#
+        );
+        let catalog = Catalog::parse(body.as_bytes()).unwrap().value;
+        assert_eq!(catalog.model_count(), 1);
+        let limits = IntegrityLimits::new(2, 0.0).unwrap();
+        assert_eq!(
+            catalog.check_size(0, limits).unwrap_err().kind(),
+            crate::ErrorKind::BelowMinimum
+        );
+        assert!(catalog.check_size(0, IntegrityLimits::new(1, 0.0).unwrap()).is_ok());
+    }
 
     #[rstest]
     #[case::clean(format!(r#"{{{RULES},"m":{{"litellm_provider":"test"}}}}"#), vec![])]
