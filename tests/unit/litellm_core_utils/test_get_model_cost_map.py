@@ -424,6 +424,21 @@ async def test_refetch_invalid_json_fails_immediately():
 
 
 @pytest.mark.asyncio
+async def test_refetch_invalid_aliases_keep_loaded_pricing() -> None:
+    pricing: Final = dict(litellm.model_cost)
+    loaded: Final = GetModelCostMap.loaded_model_cost_map()
+    rows: Final = {name: {"alias_of": "missing-target"} for name in _load_root_cost_map()}
+    client, _ = _mock_client([httpx.Response(200, json=rows)])
+
+    result: Final = await refetch_model_cost_map(url=_URL, client=client)
+
+    assert isinstance(result, ModelCostMapReloadUnavailable)
+    assert "integrity validation" in result.reason
+    assert litellm.model_cost == pricing
+    assert GetModelCostMap.loaded_model_cost_map() == loaded
+
+
+@pytest.mark.asyncio
 async def test_refetch_shrunk_map_fails_integrity_not_swapped_in():
     """A drastically shrunk upstream file is rejected instead of being adopted."""
     tiny = json.dumps(_make_models(60)).encode()

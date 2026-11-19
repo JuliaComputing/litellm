@@ -201,8 +201,14 @@ class GetModelCostMap:
         if not cls._check_is_valid_dict(fetched_map):
             return False
 
+        finalized: Final = dict(
+            _expand_alias_of(_expand_model_aliases({name: dict(entry) for name, entry in fetched_map.items()}))
+        )
+        if not cls._check_is_valid_dict(finalized):
+            return False
+
         if not cls._check_model_count_not_reduced(
-            fetched_map=fetched_map,
+            fetched_map=finalized,
             backup_model_count=backup_model_count,
             min_model_count=min_model_count,
             max_shrink_ratio=max_shrink_ratio,
