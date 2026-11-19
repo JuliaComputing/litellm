@@ -28,7 +28,7 @@ from types import MappingProxyType
 from typing import Final, Protocol, cast  # noqa: TID251  # adapts boto3 and botocore's dynamic client responses
 
 import httpx
-from pydantic import ConfigDict, TypeAdapter
+from pydantic import ConfigDict, TypeAdapter, ValidationError
 from typing_extensions import NotRequired, ReadOnly, TypedDict
 
 from litellm import verbose_logger
@@ -201,10 +201,12 @@ class GetModelCostMap:
         if not cls._check_is_valid_dict(fetched_map):
             return False
 
-        finalized: Final = dict(
-            _expand_alias_of(_expand_model_aliases({name: dict(entry) for name, entry in fetched_map.items()}))
-        )
-        if not cls._check_is_valid_dict(finalized):
+        try:
+            rows: Final = _CATALOG_ADAPTER.validate_python(fetched_map)
+        except ValidationError:
+            return False
+        finalized: Final = dict(_expand_alias_of(_expand_model_aliases(rows)))
+        if not finalized:
             return False
 
         if not cls._check_model_count_not_reduced(
