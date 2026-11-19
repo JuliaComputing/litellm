@@ -39,10 +39,10 @@ class GithubCopilotConfig(OpenAIConfig):
         super().__init__()
         self.authenticator = Authenticator()
 
-    def api_base_without_login(self, api_base: str | None = None) -> str:
+    def api_base_without_login(self, api_base: str | None = None, api_key: str | None = None) -> str:
         return (
             api_base
-            or self.authenticator.get_api_base()
+            or (None if api_key and api_key.strip() else self.authenticator.get_api_base())
             or os.getenv("GITHUB_COPILOT_API_BASE")
             or DEFAULT_GITHUB_COPILOT_API_BASE
         )
@@ -54,7 +54,7 @@ class GithubCopilotConfig(OpenAIConfig):
         api_key: str | None,
         custom_llm_provider: str,
     ) -> tuple[str | None, str | None, str]:
-        dynamic_api_base: Final = self.api_base_without_login(api_base)
+        dynamic_api_base: Final = self.api_base_without_login(api_base, api_key)
         if api_key and api_key.strip():
             return dynamic_api_base, api_key, custom_llm_provider
         try:
