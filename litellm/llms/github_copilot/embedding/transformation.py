@@ -80,10 +80,9 @@ class GithubCopilotEmbeddingConfig(BaseEmbeddingConfig):
             pin_session_authorization(session_headers, user_session.token)
             return session_headers
         try:
-            # Get GitHub Copilot API key via OAuth
-            api_key = self.authenticator.get_api_key()
+            resolved_api_key: Final = api_key if api_key and api_key.strip() else self.authenticator.get_api_key()
 
-            if not api_key:
+            if not resolved_api_key:
                 raise AuthenticationError(
                     model=model,
                     llm_provider="github_copilot",
@@ -91,7 +90,7 @@ class GithubCopilotEmbeddingConfig(BaseEmbeddingConfig):
                 )
 
             # Get default headers
-            default_headers: Final = get_copilot_default_headers(api_key)
+            default_headers: Final = get_copilot_default_headers(resolved_api_key)
 
             # Merge with existing headers (user's extra_headers take priority)
             merged_headers: Final = {**default_headers, **headers}

@@ -18,6 +18,7 @@ from litellm.llms.custom_httpx.http_handler import get_httpx_client
 from .common_utils import (
     GetAccessTokenError,
     GetDeviceCodeError,
+    github_copilot_non_interactive,
 )
 
 # Constants (default values — overridable via environment variables at call time)
@@ -154,6 +155,14 @@ class Authenticator:
             verbose_logger.warning("No existing access token found or error reading file")
         except ValueError as e:
             verbose_logger.warning("Ignoring %s, not a text access token: %s", self.access_token_file, e)
+
+        if github_copilot_non_interactive():
+            raise GetAccessTokenError(
+                message=(
+                    "No GitHub Copilot access token available and GITHUB_COPILOT_NON_INTERACTIVE disables device login"
+                ),
+                status_code=401,
+            )
 
         if not can_block_current_thread():
             raise GetAccessTokenError(
