@@ -55,6 +55,17 @@ _OBJECT_LIST: Final = TypeAdapter(list[object])
 _OBJECT_MAPPING: Final = TypeAdapter(Mapping[object, object])
 
 
+def _get_api_key_from_params(litellm_params: object) -> str | None:
+    supplied_api_key: Final[object] = (
+        litellm_params.api_key
+        if isinstance(litellm_params, GenericLiteLLMParams)
+        else _OBJECT_MAPPING.validate_python(litellm_params).get("api_key")
+        if isinstance(litellm_params, Mapping)
+        else None
+    )
+    return supplied_api_key if isinstance(supplied_api_key, str) and supplied_api_key.strip() else None
+
+
 def github_copilot_supports_responses_api(model: str) -> bool:
     """
     Gate native /v1/responses dispatch per github_copilot model.
@@ -219,8 +230,11 @@ class GithubCopilotResponsesAPIConfig(OpenAIResponsesAPIConfig):
         )
         default_headers: Final = get_copilot_default_headers(user_session.token) if user_session is not None else None
         try:
-            # Get GitHub Copilot API key via OAuth
-            api_key: Final = self.authenticator.get_api_key() if default_headers is None else ""
+            api_key: Final = (
+                ""
+                if default_headers is not None
+                else _get_api_key_from_params(litellm_params) or self.authenticator.get_api_key()
+            )
             if default_headers is None and not api_key:
                 raise AuthenticationError(
                     model=model,
