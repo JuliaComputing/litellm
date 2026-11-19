@@ -288,10 +288,15 @@ class GithubCopilotResponsesAPIConfig(OpenAIResponsesAPIConfig):
         user_session: Final = require_github_copilot_user_session(
             cast("dict[str, object]", litellm_params)  # cast-ok: litellm_params arrives as an untyped request dict
         )
+        supplied_api_key: Final[object] = _OBJECT_MAPPING.validate_python(litellm_params).get("api_key")
         effective_api_base: Final = (
             (user_session.api_base if user_session is not None else None)
             or api_base
-            or (None if _get_api_key_from_params(litellm_params) is not None else self.authenticator.get_api_base())
+            or (
+                None
+                if isinstance(supplied_api_key, str) and supplied_api_key.strip()
+                else self.authenticator.get_api_base()
+            )
             or os.getenv("GITHUB_COPILOT_API_BASE")
             or DEFAULT_GITHUB_COPILOT_API_BASE
         )
