@@ -15,9 +15,45 @@ from litellm.exceptions import AuthenticationError
 from litellm.litellm_core_utils.get_llm_provider_logic import get_llm_provider
 from litellm.llms.github_copilot.chat.transformation import GithubCopilotConfig
 from litellm.llms.github_copilot.common_utils import (
+    DEFAULT_GITHUB_COPILOT_API_BASE,
     GetAccessTokenError,
 )
 from litellm.llms.github_copilot.embedding.transformation import GithubCopilotEmbeddingConfig
+
+
+@pytest.mark.parametrize("api_key", [None, "", "   ", "caller-token"])
+@pytest.mark.parametrize("env_base", [None, "https://env.example/v1"])
+@pytest.mark.parametrize("api_base", [None, "https://explicit.example/v1"])
+def test_caller_keys_do_not_use_saved_accounts_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    api_key: str | None,
+    env_base: str | None,
+    api_base: str | None,
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    if env_base is None:
+        monkeypatch.delenv("GITHUB_COPILOT_API_BASE", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_COPILOT_API_BASE", env_base)
+    saved_token: Final = f"saved-{tmp_path.name}"
+    (tmp_path / "access-token").write_text(saved_token)
+    saved_base: Final = "https://api.tenant.githubcopilot.com"
+    caller_key_present: Final = bool(api_key and api_key.strip())
+    expected_base: Final = api_base or (
+        (env_base or DEFAULT_GITHUB_COPILOT_API_BASE) if caller_key_present else saved_base
+    )
+    with respx.mock(assert_all_called=False) as http:
+        discovery: Final = http.get("https://api.github.com/copilot_internal/user").respond(
+            json={"endpoints": {"api": saved_base}}
+        )
+        assert GithubCopilotConfig().get_openai_compatible_provider_info(
+            model="test-model", api_base=api_base, api_key=api_key, custom_llm_provider="github_copilot"
+        ) == (expected_base, api_key if caller_key_present else saved_token, "github_copilot")
+        assert GithubCopilotEmbeddingConfig().get_complete_url(
+            api_base=api_base, api_key=api_key, model="test-model", optional_params={}, litellm_params={}
+        ) == f"{expected_base}/embeddings"
+    assert discovery.called == (not api_base and not caller_key_present)
 
 
 @pytest.mark.parametrize("saved_token", [None, "global-token"])

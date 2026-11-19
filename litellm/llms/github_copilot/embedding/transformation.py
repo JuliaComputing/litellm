@@ -124,7 +124,7 @@ class GithubCopilotEmbeddingConfig(BaseEmbeddingConfig):
         effective_api_base: Final = (
             (user_session.api_base if user_session is not None else None)
             or api_base
-            or self.authenticator.get_api_base()
+            or (None if api_key and api_key.strip() else self.authenticator.get_api_base())
             or os.getenv("GITHUB_COPILOT_API_BASE")
             or DEFAULT_GITHUB_COPILOT_API_BASE
         )
