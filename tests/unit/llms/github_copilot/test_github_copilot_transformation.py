@@ -1,18 +1,250 @@
 import json
+from pathlib import Path
+from typing import Final
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+import respx
 
 import litellm
 
 # Import at the top to make the patch work correctly
 from litellm import ModelResponse, completion
 from litellm.exceptions import AuthenticationError
+from litellm.litellm_core_utils.get_llm_provider_logic import get_llm_provider
 from litellm.llms.github_copilot.chat.transformation import GithubCopilotConfig
 from litellm.llms.github_copilot.common_utils import (
+    DEFAULT_GITHUB_COPILOT_API_BASE,
     GetAccessTokenError,
 )
+from litellm.llms.github_copilot.embedding.transformation import GithubCopilotEmbeddingConfig
+from litellm.llms.github_copilot.responses.transformation import GithubCopilotResponsesAPIConfig
+
+
+@pytest.mark.parametrize("api_key", [None, "", "   ", "caller-token"])
+@pytest.mark.parametrize("env_base", [None, "https://env.example/v1"])
+@pytest.mark.parametrize("api_base", [None, "https://explicit.example/v1"])
+def test_caller_keys_do_not_use_saved_accounts_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    api_key: str | None,
+    env_base: str | None,
+    api_base: str | None,
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    if env_base is None:
+        monkeypatch.delenv("GITHUB_COPILOT_API_BASE", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_COPILOT_API_BASE", env_base)
+    saved_token: Final = f"saved-{tmp_path.name}"
+    (tmp_path / "access-token").write_text(saved_token)
+    saved_base: Final = "https://api.tenant.githubcopilot.com"
+    caller_key_present: Final = bool(api_key and api_key.strip())
+    expected_base: Final = api_base or (
+        (env_base or DEFAULT_GITHUB_COPILOT_API_BASE) if caller_key_present else saved_base
+    )
+    with respx.mock(assert_all_called=False) as http:
+        discovery: Final = http.get("https://api.github.com/copilot_internal/user").respond(
+            json={"endpoints": {"api": saved_base}}
+        )
+        assert GithubCopilotConfig().get_openai_compatible_provider_info(
+            model="test-model", api_base=api_base, api_key=api_key, custom_llm_provider="github_copilot"
+        ) == (expected_base, api_key if caller_key_present else saved_token, "github_copilot")
+        assert GithubCopilotEmbeddingConfig().get_complete_url(
+            api_base=api_base, api_key=api_key, model="test-model", optional_params={}, litellm_params={}
+        ) == f"{expected_base}/embeddings"
+        assert GithubCopilotResponsesAPIConfig().get_complete_url(
+            api_base=api_base, litellm_params={"api_key": api_key}
+        ) == f"{expected_base}/responses"
+    assert discovery.called == (not api_base and not caller_key_present)
+
+
+@pytest.mark.parametrize("saved_token", [None, "global-token"])
+def test_clientside_credentials_override_global_authentication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, saved_token: str | None
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    if saved_token is not None:
+        (tmp_path / "access-token").write_text(saved_token)
+    config: Final = GithubCopilotConfig()
+    base: Final = "https://api.individual.githubcopilot.com"
+    assert config.get_openai_compatible_provider_info(
+        model="test-model", api_base=base, api_key="caller-token", custom_llm_provider="github_copilot"
+    ) == (base, "caller-token", "github_copilot")
+    headers: Final = config.validate_environment(
+        headers={}, model="test-model", messages=[], optional_params={}, litellm_params={}, api_key="caller-token"
+    )
+    assert headers["Authorization"] == "Bearer caller-token"
+    assert headers["copilot-integration-id"] == "vscode-chat"
+    embedding_headers: Final = GithubCopilotEmbeddingConfig().validate_environment(
+        headers={}, model="test-model", messages=[], optional_params={}, litellm_params={}, api_key="caller-token"
+    )
+    assert embedding_headers["Authorization"] == "Bearer caller-token"
+
+
+@pytest.mark.parametrize("api_key", [None, "", "   "])
+def test_blank_credentials_fall_back_to_saved_copilot_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_key: str | None
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    (tmp_path / "access-token").write_text("saved-token")
+    config: Final = GithubCopilotConfig()
+    base: Final = "https://copilot.example/v1"
+    assert config.get_openai_compatible_provider_info(
+        model="test-model", api_base=base, api_key=api_key, custom_llm_provider="github_copilot"
+    ) == (base, "saved-token", "github_copilot")
+    headers: Final = config.validate_environment(
+        headers={}, model="test-model", messages=[], optional_params={}, litellm_params={}, api_key=api_key
+    )
+    assert headers["Authorization"] == "Bearer saved-token"
+    embedding_headers: Final = GithubCopilotEmbeddingConfig().validate_environment(
+        headers={}, model="test-model", messages=[], optional_params={}, litellm_params={}, api_key=api_key
+    )
+    assert embedding_headers["Authorization"] == "Bearer saved-token"
+
+
+def test_non_interactive_provider_resolution_allows_unseeded_authenticator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    monkeypatch.delenv("GITHUB_COPILOT_API_BASE", raising=False)
+    assert GithubCopilotConfig().get_openai_compatible_provider_info(
+        model="test-model", api_base=None, api_key=None, custom_llm_provider="github_copilot"
+    ) == ("https://api.githubcopilot.com", None, "github_copilot")
+
+
+def test_non_interactive_resolution_and_keyless_router_registration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    with respx.mock(assert_all_called=False) as http:
+        model, provider, api_key, _ = get_llm_provider(model="github_copilot/test-model")
+        assert (model, provider, api_key) == ("test-model", "github_copilot", None)
+        router: Final = litellm.Router(
+            model_list=[
+                {
+                    "model_name": "keyless-model",
+                    "litellm_params": {"model": "github_copilot/test-model"},
+                }
+            ],
+            num_retries=0,
+        )
+    deployments: Final = router.get_model_list(model_name="keyless-model")
+    assert len(deployments) == 1
+    assert deployments[0]["litellm_params"]["model"] == "github_copilot/test-model"
+    assert not deployments[0]["litellm_params"].get("api_key")
+    assert http.calls.call_count == 0
+
+
+@pytest.mark.parametrize("api_key", [None, "", "   "])
+@pytest.mark.parametrize("experimental_handler", [False, True])
+def test_completion_uses_saved_login_for_blank_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_key: str | None, experimental_handler: bool
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    monkeypatch.setenv("EXPERIMENTAL_OPENAI_BASE_LLM_HTTP_HANDLER", str(experimental_handler).lower())
+    (tmp_path / "access-token").write_text("saved-token")
+    response: Final = {
+        "id": "chatcmpl-test",
+        "object": "chat.completion",
+        "created": 0,
+        "model": "test-model",
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+    with respx.mock(assert_all_called=True) as http:
+        upstream: Final = http.post("https://copilot.example/v1/chat/completions").respond(json=response)
+        api_base: Final = (
+            "https://copilot.example/v1/chat/completions" if experimental_handler else "https://copilot.example/v1"
+        )
+        completion(
+            model="github_copilot/test-model",
+            api_key=api_key,
+            api_base=api_base,
+            messages=[{"role": "user", "content": "hi"}],
+        )
+    assert upstream.calls.last.request.headers["authorization"] == "Bearer saved-token"
+
+
+def test_missing_copilot_key_never_uses_openai_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "unrelated-openai-key")
+    monkeypatch.delenv("EXPERIMENTAL_OPENAI_BASE_LLM_HTTP_HANDLER", raising=False)
+    with respx.mock(assert_all_called=False) as http:
+        with pytest.raises(AuthenticationError):
+            completion(
+                model="github_copilot/test-model",
+                api_base="https://copilot.example/v1",
+                messages=[{"role": "user", "content": "hi"}],
+            )
+    assert http.calls.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_clientside_credentials_stay_request_scoped_and_rotate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    monkeypatch.delenv("EXPERIMENTAL_OPENAI_BASE_LLM_HTTP_HANDLER", raising=False)
+    monkeypatch.setattr(litellm, "disable_aiohttp_transport", True)
+    response: Final = {
+        "id": "chatcmpl-test",
+        "object": "chat.completion",
+        "created": 0,
+        "model": "test-model",
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+    with respx.mock(assert_all_called=True) as http:
+        shared: Final = http.post("https://shared.example/v1/chat/completions").respond(json=response)
+        caller: Final = http.post("https://caller.example/v1/chat/completions").respond(json=response)
+        router: Final = litellm.Router(
+            model_list=[
+                {
+                    "model_name": "shared-model",
+                    "litellm_params": {
+                        "model": "github_copilot/test-model",
+                        "api_key": "shared-token",
+                        "api_base": "https://shared.example/v1",
+                    },
+                    "model_info": {"id": "shared-deployment", "base_model": "github_copilot/test-model"},
+                }
+            ],
+            num_retries=0,
+        )
+        original: Final = router.get_model_list(model_name="shared-model")
+        await router.acompletion(
+            model="shared-model",
+            messages=[{"role": "user", "content": "hi"}],
+            api_key="caller-token",
+            api_base="https://caller.example/v1",
+        )
+        await router.acompletion(model="shared-model", messages=[{"role": "user", "content": "hi"}])
+        await router.acompletion(
+            model="shared-model",
+            messages=[{"role": "user", "content": "hi"}],
+            api_key="rotated-token",
+            api_base="https://caller.example/v1",
+        )
+        await router.acompletion(model="shared-model", messages=[{"role": "user", "content": "hi"}])
+    assert [call.request.headers["authorization"] for call in caller.calls] == [
+        "Bearer caller-token",
+        "Bearer rotated-token",
+    ]
+    assert [call.request.headers["authorization"] for call in shared.calls] == ["Bearer shared-token"] * 2
+    assert router.get_model_list(model_name="shared-model") == original
+    assert len(original) == 1
+    assert original[0]["model_info"]["base_model"] == "github_copilot/test-model"
 
 
 def test_github_copilot_config_get_openai_compatible_provider_info():
