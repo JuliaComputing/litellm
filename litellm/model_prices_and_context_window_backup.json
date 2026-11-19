@@ -168,11 +168,6 @@
         "max_output_tokens": 4096
     },
     "sample_spec": {
-        "output_cost_per_video_clip": {
-            "5s": {
-                "720p": 0.0
-            }
-        },
         "code_interpreter_cost_per_session": 0.0,
         "computer_use_input_cost_per_1k_tokens": 0.0,
         "computer_use_output_cost_per_1k_tokens": 0.0,
@@ -26614,7 +26609,6 @@
             "comment": "fal bills this endpoint by tokens and reports the charge in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. The per-image prices are fal's representative costs by the request's resolution field (1K default, 2K, 4K) for a short prompt, used when the header is absent"
         },
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 1.0,
         "output_cost_per_image": 0.04,
         "output_cost_per_image_1K": 0.04,
         "output_cost_per_image_2K": 0.059,
@@ -26630,7 +26624,6 @@
             "comment": "fal bills this endpoint by tokens and reports the charge in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. The per-image prices are fal's representative costs by the request's resolution field (1K default, 2K, 4K) for a short prompt and two 1K input images, used when the header is absent"
         },
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 1.0,
         "output_cost_per_image": 0.044,
         "output_cost_per_image_1K": 0.044,
         "output_cost_per_image_2K": 0.063,
@@ -97293,7 +97286,6 @@
     "fal_ai/fal-ai/auto-caption": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.1,
         "source": "https://fal.ai/models/fal-ai/auto-caption",
         "supported_endpoints": [
             "/v1/videos"
@@ -97309,7 +97301,6 @@
     "fal_ai/fal-ai/hunyuan-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.4,
         "source": "https://fal.ai/models/fal-ai/hunyuan-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97325,7 +97316,6 @@
     "fal_ai/fal-ai/hunyuan-video-image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.4,
         "source": "https://fal.ai/models/fal-ai/hunyuan-video-image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97341,7 +97331,6 @@
     "fal_ai/fal-ai/infinity-star/text-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.07,
         "source": "https://fal.ai/models/fal-ai/infinity-star/text-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97357,7 +97346,6 @@
     "fal_ai/fal-ai/ltx-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.02,
         "source": "https://fal.ai/models/fal-ai/ltx-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97373,7 +97361,6 @@
     "fal_ai/fal-ai/ltx-video-13b-distilled": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.04,
         "source": "https://fal.ai/models/fal-ai/ltx-video-13b-distilled",
         "supported_endpoints": [
             "/v1/videos"
@@ -97389,7 +97376,6 @@
     "fal_ai/fal-ai/ltx-video-13b-distilled/extend": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.04,
         "source": "https://fal.ai/models/fal-ai/ltx-video-13b-distilled/extend",
         "supported_endpoints": [
             "/v1/videos"
@@ -97405,7 +97391,6 @@
     "fal_ai/fal-ai/ltx-video-13b-distilled/multiconditioning": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.04,
         "source": "https://fal.ai/models/fal-ai/ltx-video-13b-distilled/multiconditioning",
         "supported_endpoints": [
             "/v1/videos"
@@ -97421,7 +97406,6 @@
     "fal_ai/fal-ai/ltx-video/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.02,
         "source": "https://fal.ai/models/fal-ai/ltx-video/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97437,7 +97421,6 @@
     "fal_ai/fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.33,
         "source": "https://fal.ai/models/fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97453,7 +97436,6 @@
     "fal_ai/fal-ai/minimax/video-01": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.5,
         "source": "https://fal.ai/models/fal-ai/minimax/video-01",
         "supported_endpoints": [
             "/v1/videos"
@@ -97469,7 +97451,6 @@
     "fal_ai/fal-ai/minimax/video-01-director": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.5,
         "source": "https://fal.ai/models/fal-ai/minimax/video-01-director",
         "supported_endpoints": [
             "/v1/videos"
@@ -97485,7 +97466,6 @@
     "fal_ai/fal-ai/minimax/video-01-director/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.5,
         "source": "https://fal.ai/models/fal-ai/minimax/video-01-director/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97501,7 +97481,6 @@
     "fal_ai/fal-ai/minimax/video-01-live": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.5,
         "source": "https://fal.ai/models/fal-ai/minimax/video-01-live",
         "supported_endpoints": [
             "/v1/videos"
@@ -97517,7 +97496,6 @@
     "fal_ai/fal-ai/minimax/video-01-live/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.5,
         "source": "https://fal.ai/models/fal-ai/minimax/video-01-live/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97533,7 +97511,6 @@
     "fal_ai/fal-ai/minimax/video-01-subject-reference": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.5,
         "source": "https://fal.ai/models/fal-ai/minimax/video-01-subject-reference",
         "supported_endpoints": [
             "/v1/videos"
@@ -97549,7 +97526,6 @@
     "fal_ai/fal-ai/minimax/video-01/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.5,
         "source": "https://fal.ai/models/fal-ai/minimax/video-01/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97565,7 +97541,6 @@
     "fal_ai/fal-ai/ovi": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.2,
         "source": "https://fal.ai/models/fal-ai/ovi",
         "supported_endpoints": [
             "/v1/videos"
@@ -97581,7 +97556,6 @@
     "fal_ai/fal-ai/ovi/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.2,
         "source": "https://fal.ai/models/fal-ai/ovi/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97597,7 +97571,6 @@
     "fal_ai/fal-ai/wan-i2v-lora": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.75,
         "source": "https://fal.ai/models/fal-ai/wan-i2v-lora",
         "supported_endpoints": [
             "/v1/videos"
@@ -97613,7 +97586,6 @@
     "fal_ai/fal-ai/wan-pro/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.8,
         "source": "https://fal.ai/models/fal-ai/wan-pro/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97629,7 +97601,6 @@
     "fal_ai/fal-ai/wan-t2v-lora": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.75,
         "source": "https://fal.ai/models/fal-ai/wan-t2v-lora",
         "supported_endpoints": [
             "/v1/videos"
@@ -97645,7 +97616,6 @@
     "fal_ai/fal-ai/wan/v2.2-5b/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.15,
         "source": "https://fal.ai/models/fal-ai/wan/v2.2-5b/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97661,7 +97631,6 @@
     "fal_ai/fal-ai/wan/v2.2-5b/text-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.15,
         "source": "https://fal.ai/models/fal-ai/wan/v2.2-5b/text-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -97677,7 +97646,6 @@
     "fal_ai/moonvalley/marey/motion-transfer": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 2,
         "source": "https://fal.ai/models/moonvalley/marey/motion-transfer",
         "supported_endpoints": [
             "/v1/videos"
@@ -97693,7 +97661,6 @@
     "fal_ai/moonvalley/marey/pose-transfer": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 2,
         "source": "https://fal.ai/models/moonvalley/marey/pose-transfer",
         "supported_endpoints": [
             "/v1/videos"
@@ -97709,7 +97676,6 @@
     "fal_ai/mureka/api/generate/lyrics-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.1,
         "source": "https://fal.ai/models/mureka/api/generate/lyrics-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -103777,7 +103743,6 @@
     "fal_ai/decart/lucy-5b/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video": 0.15,
         "source": "https://fal.ai/models/decart/lucy-5b/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -103919,19 +103884,6 @@
     "fal_ai/fal-ai/pixverse/extend": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/extend",
         "supported_endpoints": [
             "/v1/videos"
@@ -103947,14 +103899,6 @@
     "fal_ai/fal-ai/pixverse/extend/fast": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4,
-                "1080p": 0.8
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/extend/fast",
         "supported_endpoints": [
             "/v1/videos"
@@ -103970,19 +103914,6 @@
     "fal_ai/fal-ai/pixverse/v3.5/effects": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v3.5/effects",
         "supported_endpoints": [
             "/v1/videos"
@@ -103998,19 +103929,6 @@
     "fal_ai/fal-ai/pixverse/v3.5/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v3.5/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -104026,14 +103944,6 @@
     "fal_ai/fal-ai/pixverse/v3.5/image-to-video/fast": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4,
-                "1080p": 0.8
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v3.5/image-to-video/fast",
         "supported_endpoints": [
             "/v1/videos"
@@ -104049,19 +103959,6 @@
     "fal_ai/fal-ai/pixverse/v3.5/text-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v3.5/text-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -104076,14 +103973,6 @@
     "fal_ai/fal-ai/pixverse/v3.5/text-to-video/fast": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4,
-                "1080p": 0.8
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v3.5/text-to-video/fast",
         "supported_endpoints": [
             "/v1/videos"
@@ -104098,19 +103987,6 @@
     "fal_ai/fal-ai/pixverse/v3.5/transition": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v3.5/transition",
         "supported_endpoints": [
             "/v1/videos"
@@ -104126,19 +104002,6 @@
     "fal_ai/fal-ai/pixverse/v4.5/effects": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4.5/effects",
         "supported_endpoints": [
             "/v1/videos"
@@ -104154,19 +104017,6 @@
     "fal_ai/fal-ai/pixverse/v4.5/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4.5/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -104182,14 +104032,6 @@
     "fal_ai/fal-ai/pixverse/v4.5/image-to-video/fast": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4,
-                "1080p": 0.8
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4.5/image-to-video/fast",
         "supported_endpoints": [
             "/v1/videos"
@@ -104205,19 +104047,6 @@
     "fal_ai/fal-ai/pixverse/v4.5/text-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4.5/text-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -104232,14 +104061,6 @@
     "fal_ai/fal-ai/pixverse/v4.5/text-to-video/fast": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4,
-                "1080p": 0.8
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4.5/text-to-video/fast",
         "supported_endpoints": [
             "/v1/videos"
@@ -104254,19 +104075,6 @@
     "fal_ai/fal-ai/pixverse/v4.5/transition": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4.5/transition",
         "supported_endpoints": [
             "/v1/videos"
@@ -104282,19 +104090,6 @@
     "fal_ai/fal-ai/pixverse/v4/effects": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4/effects",
         "supported_endpoints": [
             "/v1/videos"
@@ -104310,19 +104105,6 @@
     "fal_ai/fal-ai/pixverse/v4/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -104338,14 +104120,6 @@
     "fal_ai/fal-ai/pixverse/v4/image-to-video/fast": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4,
-                "1080p": 0.8
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4/image-to-video/fast",
         "supported_endpoints": [
             "/v1/videos"
@@ -104361,19 +104135,6 @@
     "fal_ai/fal-ai/pixverse/v4/text-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4/text-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -104388,14 +104149,6 @@
     "fal_ai/fal-ai/pixverse/v4/text-to-video/fast": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4,
-                "1080p": 0.8
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v4/text-to-video/fast",
         "supported_endpoints": [
             "/v1/videos"
@@ -104410,19 +104163,6 @@
     "fal_ai/fal-ai/pixverse/v5/effects": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v5/effects",
         "supported_endpoints": [
             "/v1/videos"
@@ -104438,19 +104178,6 @@
     "fal_ai/fal-ai/pixverse/v5/image-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v5/image-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -104466,19 +104193,6 @@
     "fal_ai/fal-ai/pixverse/v5/text-to-video": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v5/text-to-video",
         "supported_endpoints": [
             "/v1/videos"
@@ -104493,19 +104207,6 @@
     "fal_ai/fal-ai/pixverse/v5/transition": {
         "litellm_provider": "fal_ai",
         "mode": "video_generation",
-        "output_cost_per_video_clip": {
-            "5s": {
-                "360p": 0.15,
-                "540p": 0.15,
-                "720p": 0.2,
-                "1080p": 0.4
-            },
-            "8s": {
-                "360p": 0.3,
-                "540p": 0.3,
-                "720p": 0.4
-            }
-        },
         "source": "https://fal.ai/models/fal-ai/pixverse/v5/transition",
         "supported_endpoints": [
             "/v1/videos"
@@ -105894,7 +105595,6 @@
         "litellm_provider": "fal_ai",
         "metadata": {"comment":"fal reports the charge for each request in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. One image is 1.0 unit at the default 2K resolution, 1.4921 units at 4K and 2.4921 units at 8K ($0.157), measured 2026-11-17. The per-image prices are used when the header is absent"},
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 0.063,
         "output_cost_per_image": 0.063,
         "output_cost_per_image_2K": 0.063,
         "output_cost_per_image_4K": 0.094,
@@ -105907,7 +105607,6 @@
         "litellm_provider": "fal_ai",
         "metadata": {"comment":"fal reports the charge for each request in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. One image with one input image is 1.0476 units at the default 2K resolution, 1.5397 units at 4K and 2.5397 units at 8K ($0.16), and each further input image adds 0.0476 units ($0.003), measured 2026-11-17. The per-image prices assume one input image and are used when the header is absent"},
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 0.063,
         "output_cost_per_image": 0.066,
         "output_cost_per_image_2K": 0.066,
         "output_cost_per_image_4K": 0.097,
@@ -105922,7 +105621,6 @@
         "litellm_provider": "fal_ai",
         "metadata": {"comment":"fal reports the charge for each request in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. One long image is 2.3362 units at the default 1K resolution and 2.5362 units at 2K, whatever its height, measured 2026-11-17. The per-image prices are used when the header is absent"},
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 0.235,
         "output_cost_per_image": 0.549,
         "output_cost_per_image_1K": 0.549,
         "output_cost_per_image_2K": 0.596,
@@ -106289,7 +105987,6 @@
         "litellm_provider": "fal_ai",
         "metadata": {"comment":"fal bills this endpoint by tokens ($5 per million text input tokens, $8 per million image input tokens, $34 per million image output tokens) and reports the charge in dollars in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. The per-image prices are the charges measured 2026-11-17 for one square image at the request's resolution field (1K default, 2K) with a short prompt, used when the header is absent"},
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 1.0,
         "output_cost_per_image": 0.0349,
         "output_cost_per_image_1K": 0.0349,
         "output_cost_per_image_2K": 0.1394,
@@ -106302,7 +105999,6 @@
         "litellm_provider": "fal_ai",
         "metadata": {"comment":"fal bills this endpoint by tokens ($5 per million text input tokens, $8 per million image input tokens, $34 per million image output tokens) and reports the charge in dollars in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. The per-image prices are the charges measured 2026-11-17 for one square image at the request's resolution field (1K default, 2K) with a short prompt and one input image, used when the header is absent"},
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 1.0,
         "output_cost_per_image": 0.0437,
         "output_cost_per_image_1K": 0.0437,
         "output_cost_per_image_2K": 0.1482,
@@ -106317,7 +106013,6 @@
         "litellm_provider": "fal_ai",
         "metadata": {"comment":"fal bills this endpoint by tokens ($1.75 per million text input tokens, $2.50 per million image input tokens, $10 per million image output tokens) and reports the charge in dollars in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. The per-image prices are the charges measured 2026-11-17 for one square image at the request's resolution field (1K default, 2K) with a short prompt, used when the header is absent"},
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 1.0,
         "output_cost_per_image": 0.0103,
         "output_cost_per_image_1K": 0.0103,
         "output_cost_per_image_2K": 0.041,
@@ -106330,7 +106025,6 @@
         "litellm_provider": "fal_ai",
         "metadata": {"comment":"fal bills this endpoint by tokens ($1.75 per million text input tokens, $2.50 per million image input tokens, $10 per million image output tokens) and reports the charge in dollars in the x-fal-billable-units response header, priced at output_cost_per_billable_unit dollars per unit. The per-image prices are the charges measured 2026-11-17 for one square image at the request's resolution field (1K default, 2K) with a short prompt and one input image, used when the header is absent"},
         "mode": "image_generation",
-        "output_cost_per_billable_unit": 1.0,
         "output_cost_per_image": 0.0131,
         "output_cost_per_image_1K": 0.0131,
         "output_cost_per_image_2K": 0.0438,
