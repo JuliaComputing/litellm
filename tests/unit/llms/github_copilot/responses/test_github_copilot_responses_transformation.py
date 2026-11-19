@@ -7,10 +7,13 @@ transformations for the Responses API.
 Source: litellm/llms/github_copilot/responses/transformation.py
 """
 
+from pathlib import Path
+from typing import Final
 from unittest.mock import patch, MagicMock
 
 import httpx
 import pytest
+import respx
 import litellm
 from litellm.litellm_core_utils.get_model_cost_map import get_model_cost_map
 from litellm.types.utils import LlmProviders
@@ -19,6 +22,7 @@ from litellm.llms.github_copilot.responses.transformation import (
     GithubCopilotResponsesAPIConfig,
 )
 from litellm.types.llms.openai import ResponsesAPIOptionalRequestParams
+from litellm.types.router import GenericLiteLLMParams
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +32,57 @@ def use_local_model_cost_map(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     monkeypatch.setattr(litellm, "model_cost", get_model_cost_map(url=litellm.model_cost_map_url))
     litellm.add_known_models(model_cost_map=litellm.model_cost)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_async", [False, True])
+async def test_responses_requests_use_caller_key_without_saved_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, use_async: bool
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    monkeypatch.setattr(litellm, "disable_aiohttp_transport", True)
+    payload: Final = {
+        "id": "resp-test",
+        "object": "response",
+        "created_at": 0,
+        "model": "gpt-5.5",
+        "status": "completed",
+        "output": [
+            {
+                "id": "msg-test",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "hi", "annotations": []}],
+            }
+        ],
+        "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+    }
+    request: Final = {
+        "model": "github_copilot/gpt-5.5",
+        "input": "hi",
+        "api_key": "caller-token",
+        "api_base": "https://copilot.example/v1",
+    }
+    with respx.mock(assert_all_called=True) as http:
+        upstream: Final = http.post("https://copilot.example/v1/responses").respond(json=payload)
+        result: Final = await litellm.aresponses(**request) if use_async else litellm.responses(**request)
+    assert result.output[0].content[0].text == "hi"
+    assert upstream.calls.last.request.headers["authorization"] == "Bearer caller-token"
+
+
+@pytest.mark.parametrize("api_key", [None, "", "   "])
+def test_responses_blank_keys_use_saved_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_key: str | None
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    (tmp_path / "access-token").write_text("saved-token")
+    headers: Final = GithubCopilotResponsesAPIConfig().validate_environment(
+        headers={}, model="gpt-5.5", litellm_params=GenericLiteLLMParams(api_key=api_key)
+    )
+    assert headers["Authorization"] == "Bearer saved-token"
 
 
 class TestGithubCopilotResponsesAPITransformation:
