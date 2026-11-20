@@ -1,11 +1,15 @@
+import json
+from pathlib import Path
 from typing import Final
 from unittest.mock import MagicMock
 
 import httpx
 import pytest
+import respx
 
+import litellm
 from litellm.exceptions import AuthenticationError
-from litellm.llms.github_copilot.common_utils import GetAccessTokenError
+from litellm.llms.github_copilot.common_utils import DEFAULT_GITHUB_COPILOT_API_BASE, GetAccessTokenError
 from litellm.llms.github_copilot.messages.transformation import (
     GithubCopilotAnthropicMessagesConfig,
 )
@@ -15,13 +19,147 @@ from litellm.llms.github_copilot.per_user_auth import (
 )
 
 
-def test_github_copilot_anthropic_messages_get_complete_url():
-    """get_complete_url builds the /v1/messages URL from the base it is handed.
+@pytest.mark.parametrize("api_base", [None, "https://caller.example/", "https://caller.example/v1/messages"])
+def test_messages_caller_key_never_uses_stored_endpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_base: str | None
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    (tmp_path / "access-token").write_text("saved-token")
+    config: Final = GithubCopilotAnthropicMessagesConfig()
+    with respx.mock(assert_all_called=False) as http:
+        discovery: Final = http.get("https://api.github.com/copilot_internal/user").respond(
+            json={"endpoints": {"api": "https://api.business.githubcopilot.com"}}
+        )
+        headers, base = config.validate_anthropic_messages_environment(
+            headers={},
+            model="github_copilot/claude-opus-5.5",
+            messages=[],
+            optional_params={},
+            litellm_params={},
+            api_key="caller-token",
+            api_base=api_base,
+        )
+        url: Final = config.get_complete_url(base, "caller-token", "claude-opus-5.5", {}, {})
+        direct_url: Final = config.get_complete_url(api_base, "caller-token", "claude-opus-5.5", {}, {})
+    assert headers["Authorization"] == "Bearer caller-token"
+    assert (
+        url
+        == direct_url
+        == (
+            f"{DEFAULT_GITHUB_COPILOT_API_BASE}/v1/messages"
+            if api_base is None
+            else "https://caller.example/v1/messages"
+        )
+    )
+    assert not discovery.called
 
-    In the request flow that ``api_base`` is the value already resolved by
-    validate_anthropic_messages_environment (the authenticated Copilot host); the
-    caller-supplied base is discarded there, not here (see the validate tests).
-    """
+
+@pytest.mark.parametrize("api_key", [None, "", "   "])
+def test_messages_blank_key_keeps_stored_credentials_and_ignores_caller_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_key: str | None
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    (tmp_path / "access-token").write_text(f"stored-{tmp_path.name}")
+    config: Final = GithubCopilotAnthropicMessagesConfig()
+    with respx.mock as http:
+        http.get("https://api.github.com/copilot_internal/user").respond(
+            json={"endpoints": {"api": "https://api.business.githubcopilot.com/"}}
+        )
+        headers, base = config.validate_anthropic_messages_environment(
+            headers={},
+            model="github_copilot/claude-opus-5.5",
+            messages=[],
+            optional_params={},
+            litellm_params={},
+            api_key=api_key,
+            api_base="https://caller.example",
+        )
+    assert headers["Authorization"] == f"Bearer stored-{tmp_path.name}"
+    assert config.get_complete_url(base, api_key, "claude-opus-5.5", {}, {}) == (
+        "https://api.business.githubcopilot.com/v1/messages"
+    )
+
+
+@pytest.mark.parametrize("api_key", [None, "", "   "])
+def test_messages_without_caller_key_or_login_still_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_key: str | None
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    with respx.mock:
+        with pytest.raises(AuthenticationError, match="GITHUB_COPILOT_NON_INTERACTIVE"):
+            GithubCopilotAnthropicMessagesConfig().validate_anthropic_messages_environment(
+                headers={},
+                model="github_copilot/claude-opus-5.5",
+                messages=[],
+                optional_params={},
+                litellm_params={},
+                api_key=api_key,
+                api_base=None,
+            )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_sdk_wrapper", [False, True])
+@pytest.mark.parametrize("stream", [False, True])
+async def test_messages_public_requests_use_caller_key_without_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, use_sdk_wrapper: bool, stream: bool
+) -> None:
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    monkeypatch.setenv("GITHUB_COPILOT_NON_INTERACTIVE", "1")
+    monkeypatch.setattr(litellm, "disable_aiohttp_transport", True)
+    payload: Final = {
+        "id": "msg-caller",
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "text", "text": "hi"}],
+        "model": "claude-opus-5.5",
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+    events: Final = (
+        {"type": "message_start", "message": {**payload, "content": [], "stop_reason": None}},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hi"}},
+        {"type": "content_block_stop", "index": 0},
+        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+        {"type": "message_stop"},
+    )
+    sse: Final = "".join(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events).encode()
+    request: Final = {
+        "model": "github_copilot/claude-opus-5.5",
+        "max_tokens": 16,
+        "messages": [{"role": "user", "content": "hi"}],
+        "api_key": "caller-token",
+        "api_base": "https://caller.example",
+        "stream": stream,
+    }
+    with respx.mock as http:
+        upstream: Final = http.post("https://caller.example/v1/messages").respond(
+            content=sse if stream else json.dumps(payload).encode(),
+            headers={"content-type": "text/event-stream" if stream else "application/json"},
+        )
+        result: Final = (
+            await litellm.anthropic.messages.acreate(**request)
+            if use_sdk_wrapper
+            else await litellm.anthropic_messages(**request)
+        )
+        if stream:
+            body: Final = b"".join([chunk async for chunk in result])
+            assert b'"text": "hi"' in body
+            assert b"message_stop" in body
+        else:
+            assert result["id"] == payload["id"]
+            assert result["content"] == payload["content"]
+    assert upstream.calls.last.request.headers["authorization"] == "Bearer caller-token"
+    assert json.loads(upstream.calls.last.request.content)["stream"] == stream
+
+
+def test_github_copilot_anthropic_messages_get_complete_url():
+    """Build the /v1/messages URL from the validated base."""
     config = GithubCopilotAnthropicMessagesConfig()
     config.authenticator = MagicMock()
     config.authenticator.get_api_base.return_value = None
@@ -366,6 +504,8 @@ def test_validate_environment_uses_per_user_session_and_skips_authenticator():
         messages=[],
         optional_params={},
         litellm_params={"github_copilot_user_session": session},
+        api_key="caller-token",
+        api_base="https://caller.example",
     )
     assert headers["Authorization"] == "Bearer user-copilot-token"
     assert api_base == "https://tenant.githubcopilot.com"
