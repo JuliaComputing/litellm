@@ -64,25 +64,26 @@ class GithubCopilotAnthropicMessagesConfig(AnthropicMessagesConfig):
         """
         Validate environment for GitHub Copilot and add Copilot-specific headers.
 
-        The caller-supplied ``api_base`` is intentionally ignored. Routing this
-        request anywhere other than the authenticated Copilot endpoint would
-        leak the Copilot bearer token to a caller-controlled URL.
+        A user session takes precedence. Caller credentials use the supplied
+        base or the default Copilot host. Without caller credentials, ignore
+        the supplied base to avoid leaking the stored token.
         """
-        # Always use the Copilot endpoint resolved from the authenticated
-        # session, never the caller-supplied api_base. rstrip so a
-        # tenant-specific base with a trailing slash does not yield a
-        # double-slash URL once "/v1/messages" is appended downstream.
         user_session: Final = require_github_copilot_user_session(
             cast("dict[str, object]", litellm_params)  # cast-ok: litellm_params arrives as an untyped request dict
         )
+        caller_api_key: Final = api_key if api_key is not None and api_key.strip() else None
         dynamic_api_base: Final = (
             user_session.api_base
             if user_session is not None
-            else (self.authenticator.get_api_base() or DEFAULT_GITHUB_COPILOT_API_BASE)
+            else (
+                (api_base or DEFAULT_GITHUB_COPILOT_API_BASE)
+                if caller_api_key is not None
+                else (self.authenticator.get_api_base() or DEFAULT_GITHUB_COPILOT_API_BASE)
+            )
         ).rstrip("/")
         try:
             dynamic_api_key: Final = (
-                user_session.token if user_session is not None else self.authenticator.get_api_key()
+                user_session.token if user_session is not None else caller_api_key or self.authenticator.get_api_key()
             )
         except GetAccessTokenError as e:
             raise AuthenticationError(
@@ -127,12 +128,8 @@ class GithubCopilotAnthropicMessagesConfig(AnthropicMessagesConfig):
         """
         Return the complete URL for GitHub Copilot /v1/messages endpoint.
 
-        ``api_base`` here is the value already resolved by
-        ``validate_anthropic_messages_environment`` (the authenticated Copilot
-        host), not the raw caller-supplied base — that one is discarded there to
-        avoid leaking the Copilot bearer token to a caller-controlled URL. We
-        reuse it to avoid a second authenticator read, falling back to a fresh
-        resolution only if it was not provided.
+        Reuse the base resolved by ``validate_anthropic_messages_environment``.
+        Caller credentials never use the stored login's endpoint.
         """
         user_session: Final = require_github_copilot_user_session(
             cast("dict[str, object]", litellm_params)  # cast-ok: litellm_params arrives as an untyped request dict
@@ -140,7 +137,7 @@ class GithubCopilotAnthropicMessagesConfig(AnthropicMessagesConfig):
         resolved: Final = (
             (user_session.api_base if user_session is not None else None)
             or api_base
-            or self.authenticator.get_api_base()
+            or (None if api_key is not None and api_key.strip() else self.authenticator.get_api_base())
             or DEFAULT_GITHUB_COPILOT_API_BASE
         )
         return ensure_api_route(resolved, "v1/messages")
